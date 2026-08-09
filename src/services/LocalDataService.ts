@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AuthRole, AuthSession, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -60,6 +60,13 @@ export class LocalDataService implements DataService {
 
   async logout(token: string): Promise<void> { this.sessions.delete(token); }
 
+  async getBootstrap(token: string): Promise<BootstrapData> {
+    const [players, measurements, session] = await Promise.all([
+      this.getPlayers(token), this.getMeasurements(token), this.getCurrentSession(token),
+    ]);
+    return { players, measurements, session };
+  }
+
   async getPlayers(token: string): Promise<Player[]> {
     const session = this.requireSession(token);
     const players = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active).sort((a, b) => a.order - b.order);
@@ -93,11 +100,16 @@ export class LocalDataService implements DataService {
     }
 
     const items = readJson(MEASUREMENTS_KEY, createDemoMeasurements());
-    const date = todayKey();
+    const date = auth.role === 'staff' && input.date ? input.date : todayKey();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayKey()) throw new DataServiceError('La fecha de la medición no es válida.', 'VALIDATION');
     const existingIndex = items.findIndex((item) => item.playerId === input.playerId && item.date === date);
 
     const now = new Date();
     const previous = existingIndex >= 0 ? items[existingIndex] : undefined;
+    const previousCreatedAt = previous ? new Date(previous.createdAt).getTime() : NaN;
+    if (previous && auth.role !== 'staff' && (!Number.isFinite(previousCreatedAt) || Date.now() - previousCreatedAt > 24 * 60 * 60 * 1000)) {
+      throw new DataServiceError('Han pasado más de 24 horas. Solo el cuerpo técnico puede modificar este registro.', 'EDIT_WINDOW_EXPIRED');
+    }
     const measurement: Measurement = {
       id: previous?.id || crypto.randomUUID(),
       date,
