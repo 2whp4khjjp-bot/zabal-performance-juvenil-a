@@ -115,6 +115,14 @@ h1, h2, h3, .brand__name { font-family: 'Manrope', sans-serif; }
 .summary-counters__pending span { color: var(--yellow-dark); }
 
 .player-toolbar { margin-bottom: 22px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.roster-date-selector { margin: -4px 0 20px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid #c9d7e5; border-radius: 12px; background: #f5f8fb; }
+.roster-date-selector__label { display: flex; align-items: center; gap: 11px; color: var(--navy); }
+.roster-date-selector__label > span { display: grid; gap: 2px; }
+.roster-date-selector__label strong { font-family: 'Manrope'; font-size: .94rem; }
+.roster-date-selector__label small { color: var(--muted); line-height: 1.35; }
+.roster-date-selector__controls { display: flex; align-items: center; gap: 9px; }
+.roster-date-selector__controls input { min-width: 164px; height: 43px; padding: 0 11px; border: 1px solid #b8c7d6; border-radius: 9px; color: var(--navy); background: #fff; font: inherit; font-weight: 750; }
+.roster-date-selector__controls button { min-height: 43px; padding: 0 13px; border: 1px solid #aebfd0; border-radius: 9px; color: var(--navy); background: #fff; font-weight: 800; }
 .search-field { position: relative; min-width: 280px; }
 .search-field svg { position: absolute; top: 50%; left: 14px; transform: translateY(-50%); color: #728195; pointer-events: none; }
 .search-field input { width: 100%; height: 48px; padding: 0 14px 0 44px; border: 1px solid #cfd9e4; border-radius: 10px; color: var(--navy); background: #fff; }
@@ -371,6 +379,9 @@ tbody tr:hover { background: #f8fafc; }
   .summary-counters { width: 100%; min-width: 0; }
   .summary-counters div { min-height: 70px; padding: 10px 12px; }
   .player-toolbar { align-items: stretch; flex-direction: column; }
+  .roster-date-selector { align-items: stretch; flex-direction: column; }
+  .roster-date-selector__controls { align-items: stretch; }
+  .roster-date-selector__controls input { width: 100%; min-width: 0; }
   .search-field { min-width: 0; }
   .segmented-control { overflow-x: auto; }
   .segmented-control button { flex: 1; padding: 0 10px; white-space: nowrap; }

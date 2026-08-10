@@ -9,6 +9,7 @@ import { PlayerGrid } from './components/PlayerGrid';
 import { PlayerForm } from './components/PlayerForm';
 import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
+import { todayKey } from './utils/date';
 import './styles.css';
 
 const TechnicalPanel = lazy(() => import('./components/TechnicalPanel').then((module) => ({ default: module.TechnicalPanel })));
@@ -25,6 +26,7 @@ export default function App() {
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [measurementDate, setMeasurementDate] = useState(todayKey());
   const [view, setView] = useState<View>('players');
   const [filter, setFilter] = useState<DashboardFilter>('all');
   const [query, setQuery] = useState('');
@@ -43,6 +45,7 @@ export default function App() {
     setTrainingSession(null);
     setMatches([]);
     setSelectedPlayer(null);
+    setMeasurementDate(todayKey());
     setView('players');
     setRemaining(0);
   };
@@ -165,8 +168,8 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
-      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
+      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}

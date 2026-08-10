@@ -13,6 +13,8 @@ type FormProps = {
   onSave: (input: MeasurementInput) => Promise<boolean>;
   onBack: () => void;
   role: AuthRole;
+  selectedDate: string;
+  onDateChange: (date: string) => void;
 };
 
 type Draft = { weight: string; fatigue: number | null; soreness: number | null; comments: string };
@@ -52,8 +54,8 @@ function ScorePicker({ label, value, onChange }: { label: string; value: number 
   );
 }
 
-export function PlayerForm({ player, measurements, session, saving, onSave, onBack, role }: FormProps) {
-  const [measurementDate, setMeasurementDate] = useState(todayKey());
+export function PlayerForm({ player, measurements, session, saving, onSave, onBack, role, selectedDate, onDateChange }: FormProps) {
+  const measurementDate = role === 'staff' ? selectedDate : todayKey();
   const existing = measurements.find((item) => item.playerId === player.id && item.date === measurementDate);
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
   const [errors, setErrors] = useState<string[]>([]);
@@ -108,8 +110,8 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
         <form className="measurement-form" onSubmit={submit} noValidate>
           {role === 'staff' && <section className="form-section historical-date-field">
             <label htmlFor="measurement-date"><CalendarDays size={20} /> Fecha de la medición</label>
-            <input id="measurement-date" type="date" max={todayKey()} value={measurementDate} onChange={(event) => setMeasurementDate(event.target.value || todayKey())} />
-            <small>Selecciona otro día para añadir datos atrasados o corregir una medición ya guardada.</small>
+            <input id="measurement-date" type="date" max={todayKey()} value={measurementDate} onChange={(event) => onDateChange(event.target.value || todayKey())} />
+            <small>Esta fecha se conservará al volver a la plantilla y al abrir el siguiente jugador.</small>
           </section>}
           <section className="form-section">
             <div className="weight-field">

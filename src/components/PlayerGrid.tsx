@@ -1,11 +1,13 @@
-import { AlertTriangle, CheckCircle2, CircleDashed, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, CircleDashed, Search, ShieldAlert } from 'lucide-react';
 import type { DashboardFilter, Measurement, Player } from '../types';
-import { todayKey } from '../utils/date';
+import { formatDate, todayKey } from '../utils/date';
 import { alertLabel, getAlertLevel } from '../utils/measurements';
 
 type PlayerGridProps = {
   players: Player[];
   measurements: Measurement[];
+  selectedDate: string;
+  onDateChange: (date: string) => void;
   onSelect: (player: Player) => void;
   filter: DashboardFilter;
   onFilterChange: (filter: DashboardFilter) => void;
@@ -21,12 +23,12 @@ const statusIcon = {
   alert: ShieldAlert,
 };
 
-export function PlayerGrid({ players, measurements, onSelect, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
+export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
   const today = todayKey();
-  const todayByPlayer = new Map(measurements.filter((item) => item.date === today).map((item) => [item.playerId, item]));
-  const registered = todayByPlayer.size;
+  const measurementsByPlayer = new Map(measurements.filter((item) => item.date === selectedDate).map((item) => [item.playerId, item]));
+  const registered = measurementsByPlayer.size;
   const filtered = players.filter((player) => {
-    const hasMeasurement = todayByPlayer.has(player.id);
+    const hasMeasurement = measurementsByPlayer.has(player.id);
     const matchesFilter = filter === 'all' || (filter === 'registered' ? hasMeasurement : !hasMeasurement);
     return matchesFilter && player.name.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es').trim());
   });
@@ -35,9 +37,9 @@ export function PlayerGrid({ players, measurements, onSelect, filter, onFilterCh
     <main className="page-shell player-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow eyebrow--dark">Sesión de hoy</p>
+          <p className="eyebrow eyebrow--dark">{selectedDate === today ? 'Sesión de hoy' : 'Registro de otro día'}</p>
           <h1>Estado de la plantilla</h1>
-          <p>Selecciona un jugador para registrar su control preentrenamiento.</p>
+          <p>Jugadores y mediciones del {formatDate(selectedDate)}.</p>
         </div>
         <div className="summary-counters" aria-label="Resumen de la sesión">
           <div><span>{players.length}</span><small>Plantilla</small></div>
@@ -45,6 +47,17 @@ export function PlayerGrid({ players, measurements, onSelect, filter, onFilterCh
           <div className="summary-counters__pending"><span>{players.length - registered}</span><small>Pendientes</small></div>
         </div>
       </div>
+
+      <section className="roster-date-selector" aria-label="Día de las mediciones">
+        <div className="roster-date-selector__label">
+          <CalendarDays size={22} aria-hidden="true" />
+          <span><strong>Día de registro</strong><small>Elige la fecha una vez; se mantendrá al entrar y volver de cada jugador.</small></span>
+        </div>
+        <div className="roster-date-selector__controls">
+          <input type="date" max={today} value={selectedDate} onChange={(event) => onDateChange(event.target.value || today)} aria-label="Fecha de las mediciones" />
+          {selectedDate !== today && <button type="button" onClick={() => onDateChange(today)}>Volver a hoy</button>}
+        </div>
+      </section>
 
       <section className="player-toolbar" aria-label="Filtros de jugadores">
         <div className="search-field">
@@ -65,7 +78,7 @@ export function PlayerGrid({ players, measurements, onSelect, filter, onFilterCh
       {filtered.length ? (
         <section className="player-grid" aria-live="polite">
           {filtered.map((player) => {
-            const measurement = todayByPlayer.get(player.id);
+            const measurement = measurementsByPlayer.get(player.id);
             const level = getAlertLevel(measurement);
             const Icon = statusIcon[level];
             return (
