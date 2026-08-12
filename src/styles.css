@@ -156,6 +156,10 @@ h1, h2, h3, .brand__name { font-family: 'Manrope', sans-serif; }
 .player-card--injured .player-card__status { color: #a12f3b; }
 .player-card__injury-control { position: absolute; right: 11px; top: 9px; display: inline-flex; align-items: center; gap: 5px; color: #657487; font-size: .68rem; font-weight: 800; cursor: pointer; }
 .player-card__injury-control input { accent-color: #b83340; }
+.player-card--staff { border-color: #e4c34d; border-left-color: var(--yellow); background: #173a6a; color: var(--yellow); }
+.player-card--staff .player-card__number { color: var(--navy); background: var(--yellow); }
+.player-card--staff .player-card__body > strong, .player-card--staff .player-card__status, .player-card--staff .player-card__injury-control { color: var(--yellow); }
+.player-card__staff-label { color: #fff; font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .injury-blocked-state { max-width: 650px; margin: 70px auto; padding: 40px 28px; border: 1px solid #efc4c9; border-radius: 16px; text-align: center; color: #8f2d38; background: #fff4f5; }
 .injury-blocked-state h1 { margin: 8px 0 12px; color: var(--navy); }
 .injury-blocked-state p:last-child { margin: 0 auto; max-width: 520px; color: #64758a; line-height: 1.55; }

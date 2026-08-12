@@ -11,5 +11,6 @@ const shirtNumbers: Array<[number, RegExp]> = [
 
 export const applyJuvenilRoster = (players: Player[]) => players.map((player) => {
   const assigned = shirtNumbers.find(([, pattern]) => pattern.test(player.name.trim()))?.[0];
-  return { ...player, number: assigned ?? player.number };
-}).sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.order - b.order);
+  const staffMember = player.staffMember || /\bCT\b|cuerpo t[ée]cnico|entrenador|preparador|fisio|delegado/i.test(player.name);
+  return { ...player, number: staffMember ? undefined : assigned ?? player.number, staffMember };
+}).sort((a, b) => Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number ?? 999) - (b.number ?? 999) || a.order - b.order);

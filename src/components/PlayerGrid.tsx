@@ -86,7 +86,7 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
             const level = getAlertLevel(measurement);
             const Icon = statusIcon[level];
             return (
-              <article key={player.id} className={`player-card player-card--${level} ${player.injured ? 'player-card--injured' : ''}`}>
+              <article key={player.id} className={`player-card player-card--${level} ${player.injured ? 'player-card--injured' : ''} ${player.staffMember ? 'player-card--staff' : ''}`}>
                 <button
                   type="button"
                   data-testid={`player-${player.id}`}
@@ -95,9 +95,10 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
                   onClick={() => onSelect(player)}
                   aria-label={`${player.name}, ${player.injured ? 'baja por lesión' : alertLabel[level]}`}
                 >
-                  <span className="player-card__number">{player.number ?? '—'}</span>
+                  <span className="player-card__number">{player.staffMember ? 'CT' : player.number ?? '—'}</span>
                   <span className="player-card__body">
                     <strong>{player.name}</strong>
+                    {player.staffMember && <span className="player-card__staff-label">Cuerpo técnico</span>}
                     <span className="player-card__status">{player.injured ? <><XCircle size={17} /> Baja por lesión</> : <><Icon size={17} /> {alertLabel[level]}</>}</span>
                   </span>
                   {measurement && <span className="player-card__values">F {measurement.fatigue ?? '—'} · M {measurement.soreness ?? '—'}</span>}

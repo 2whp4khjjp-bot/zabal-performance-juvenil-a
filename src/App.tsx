@@ -36,6 +36,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [offline, setOffline] = useState(!navigator.onLine);
+  const [hydratedToken, setHydratedToken] = useState('');
 
   const logout = async () => {
     if (auth) void dataService.logout(auth.token).catch(() => undefined);
@@ -45,6 +46,7 @@ export default function App() {
     setMeasurements([]);
     setTrainingSession(null);
     setMatches([]);
+    setHydratedToken('');
     setSelectedPlayer(null);
     setMeasurementDate(todayKey());
     setView('players');
@@ -60,7 +62,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!auth) return;
+    if (!auth || hydratedToken === auth.token) return;
     const update = () => {
       const seconds = remainingSeconds(auth.expiresAt);
       setRemaining(seconds);
@@ -78,12 +80,13 @@ export default function App() {
       setPlayers(applyJuvenilRoster(nextPlayers));
       setMeasurements(nextMeasurements);
       setTrainingSession(nextSession);
+      setHydratedToken(auth.token);
       if (auth.role === 'player') setSelectedPlayer(applyJuvenilRoster(nextPlayers)[0] ?? null);
     }).catch((cause: Error) => {
       setError(cause.message || 'No se pudieron cargar los datos.');
       if (/sesión|session|unauthorized/i.test(cause.message)) void logout();
     }).finally(() => setLoading(false));
-  }, [auth?.token]);
+  }, [auth?.token, hydratedToken]);
 
   useEffect(() => {
     if (!auth || matchesLoaded || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
@@ -104,8 +107,21 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const session = await dataService.authenticate(pin, role);
+      const { auth: session, bootstrap } = await dataService.authenticate(pin, role);
       saveAuthSession(session);
+      if (bootstrap) {
+        const nextPlayers = applyJuvenilRoster(bootstrap.players);
+        setPlayers(nextPlayers);
+        setMeasurements(bootstrap.measurements);
+        setTrainingSession(bootstrap.session);
+        setHydratedToken(session.token);
+        if (role === 'player') setSelectedPlayer(nextPlayers[0] ?? null);
+        if (role === 'staff') {
+          void dataService.getMeasurements(session.token)
+            .then(setMeasurements)
+            .catch(() => setError('La plantilla está disponible, pero el histórico sigue cargándose.'));
+        }
+      }
       setAuth(session);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo iniciar sesión.');

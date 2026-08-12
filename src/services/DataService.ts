@@ -1,7 +1,7 @@
-import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, BootstrapData, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 
 export interface DataService {
-  authenticate(pin: string, role: AuthRole): Promise<AuthSession>;
+  authenticate(pin: string, role: AuthRole): Promise<LoginResult>;
   logout(token: string): Promise<void>;
   getBootstrap(token: string): Promise<BootstrapData>;
   getPlayers(token: string): Promise<Player[]>;

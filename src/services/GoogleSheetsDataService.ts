@@ -1,4 +1,4 @@
-import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, BootstrapData, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -41,7 +41,7 @@ export class GoogleSheetsDataService implements DataService {
   }
 
   authenticate(pin: string, role: AuthRole) {
-    return this.request<AuthSession>('authenticate', { pin, role });
+    return this.request<LoginResult>('authenticate', { pin, role, includeBootstrap: true });
   }
 
   async logout(token: string) {

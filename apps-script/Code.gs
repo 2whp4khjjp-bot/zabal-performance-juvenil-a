@@ -70,7 +70,7 @@ function doPost(event) {
   try {
     const input = JSON.parse(event.postData.contents || '{}');
     const action = String(input.action || '');
-    if (action === 'authenticate') return json_({ ok: true, data: authenticate_(input.pin, input.role) });
+    if (action === 'authenticate') return json_({ ok: true, data: authenticate_(input.pin, input.role, input.includeBootstrap) });
     if (action === 'logout') return json_({ ok: true, data: logout_(input.token) });
     const session = requireSession_(input.token);
     if (action === 'getBootstrap') return json_({ ok: true, data: getBootstrap_(session) });
@@ -95,14 +95,35 @@ function setupProject() {
   Object.keys(HEADERS).forEach(function(name) { ensureSheet_(spreadsheet, name, HEADERS[name]); });
   ensureConfig_('nombre_equipo', 'Atlético Zabal Linense');
   ensureConfig_('temporada', '2026-27');
-  ensureConfig_('duracion_sesion_minutos', '30');
+  setConfig_('duracion_sesion_minutos', '60');
   ensureConfig_('fatiga_moderada_desde', '4');
   ensureConfig_('fatiga_alerta_desde', '7');
   ensureConfig_('molestias_moderada_desde', '4');
   ensureConfig_('molestias_alerta_desde', '7');
   ensureConfig_('duracion_partido_minutos', '90');
   ensureAuthSecret_();
+  ensureStaffMember_('Luis Lara CT');
   return 'Estructura actualizada. Configura el PIN técnico y genera los PINs de jugadores desde el menú Zabal Performance.';
+}
+
+function ensureStaffMember_(name) {
+  const sheet = sheet_(SHEETS.PLAYERS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const nameColumn = headers.indexOf('nombre');
+  if (values.slice(1).some(function(row) { return String(row[nameColumn]).trim().toLowerCase() === String(name).trim().toLowerCase(); })) return;
+  const idColumn = headers.indexOf('id');
+  const orderColumn = headers.indexOf('orden');
+  const maxOrder = values.slice(1).reduce(function(maximum, row) { return Math.max(maximum, Number(row[orderColumn] || 0)); }, 0);
+  const row = headers.map(function(header) {
+    if (header === 'id') return 'staff-luis-lara';
+    if (header === 'nombre') return name;
+    if (header === 'activo') return true;
+    if (header === 'orden') return maxOrder + 1;
+    if (header === 'fecha_alta') return new Date();
+    return '';
+  });
+  sheet.appendRow(row);
 }
 
 function setStaffPin(pin) {
@@ -112,7 +133,7 @@ function setStaffPin(pin) {
   return 'PIN guardado como hash SHA-256.';
 }
 
-function authenticate_(pin, requestedRole) {
+function authenticate_(pin, requestedRole, includeBootstrap) {
   const role = String(requestedRole || '') === 'player' ? 'player' : 'staff';
   const cleanPin = String(pin || '').trim();
   let player;
@@ -126,9 +147,19 @@ function authenticate_(pin, requestedRole) {
     if (!row) throw apiError_('El PIN de jugador no es correcto.', 'INVALID_PIN');
     player = { id: String(row.id), name: String(row.nombre) };
   }
-  const duration = 30 * 60 * 1000;
+  const duration = 60 * 60 * 1000;
   const payload = { role: role, playerId: player && player.id, playerName: player && player.name, exp: Date.now() + duration };
-  return { token: signSession_(payload), expiresAt: payload.exp, role: role, playerId: payload.playerId, playerName: payload.playerName };
+  const auth = { token: signSession_(payload), expiresAt: payload.exp, role: role, playerId: payload.playerId, playerName: payload.playerName };
+  if (includeBootstrap) return { auth: auth, bootstrap: getLoginBootstrap_(payload) };
+  return auth;
+}
+
+function getLoginBootstrap_(session) {
+  return {
+    players: getPlayers_(session),
+    measurements: session.role === 'player' ? getMeasurements_(session) : [],
+    session: getCurrentSession_(),
+  };
 }
 
 function logout_() { return true; }
@@ -151,8 +182,10 @@ function requireStaff_(session) {
 
 function getPlayers_(session) {
   return rows_(SHEETS.PLAYERS).filter(function(row) { return boolean_(row.activo) && (!session || session.role === 'staff' || String(row.id) === String(session.playerId)); }).map(function(row) {
-    return { id: String(row.id), name: String(row.nombre), number: numberOrNull_(row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: boolean_(row.baja_lesion) };
-  }).sort(function(a, b) { return (a.number || 999) - (b.number || 999) || a.order - b.order; });
+    const name = String(row.nombre);
+    const staffMember = /\bCT\b|cuerpo t[ée]cnico|entrenador|preparador|fisio|delegado/i.test(name);
+    return { id: String(row.id), name: name, number: staffMember ? undefined : numberOrNull_(row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: boolean_(row.baja_lesion), staffMember: staffMember };
+  }).sort(function(a, b) { return Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number || 999) - (b.number || 999) || a.order - b.order; });
 }
 
 function setPlayerInjury_(playerId, injured, session) {
@@ -474,6 +507,17 @@ function ensureConfig_(key, value) {
   const values = sheet.getDataRange().getValues();
   for (let index = 1; index < values.length; index += 1) {
     if (String(values[index][0]) === key) return;
+  }
+  sheet.appendRow([key, value]);
+}
+
+function setConfig_(key, value) {
+  const sheet = sheet_(SHEETS.CONFIG);
+  const values = sheet.getDataRange().getValues();
+  for (let index = 1; index < values.length; index += 1) {
+    if (String(values[index][0]) !== key) continue;
+    sheet.getRange(index + 1, 2).setValue(value);
+    return;
   }
   sheet.appendRow([key, value]);
 }

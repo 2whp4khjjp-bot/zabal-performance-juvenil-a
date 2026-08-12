@@ -6,6 +6,7 @@ export type Player = {
   order: number;
   joinedAt: string;
   injured?: boolean;
+  staffMember?: boolean;
 };
 
 export type Measurement = {
@@ -78,6 +79,11 @@ export type BootstrapData = {
   players: Player[];
   measurements: Measurement[];
   session: TrainingSession;
+};
+
+export type LoginResult = {
+  auth: AuthSession;
+  bootstrap?: BootstrapData;
 };
 
 export type ReportKind = 'daily' | 'weekly' | 'player' | 'alerts';

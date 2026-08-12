@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AuthRole, AuthSession, BootstrapData, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, AuthSession, BootstrapData, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -36,7 +36,7 @@ export class LocalDataService implements DataService {
     return session;
   }
 
-  async authenticate(pin: string, role: AuthRole): Promise<AuthSession> {
+  async authenticate(pin: string, role: AuthRole): Promise<LoginResult> {
     let player: Player | undefined;
     if (role === 'staff') {
       const inputHash = await sha256(pin);
@@ -55,7 +55,7 @@ export class LocalDataService implements DataService {
       playerName: player?.name,
     };
     this.sessions.set(session.token, session);
-    return session;
+    return { auth: session, bootstrap: await this.getBootstrap(session.token) };
   }
 
   async logout(token: string): Promise<void> { this.sessions.delete(token); }

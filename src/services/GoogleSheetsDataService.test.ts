@@ -13,14 +13,14 @@ describe('servicio remoto', () => {
       .mockResolvedValueOnce({ ok: false })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ ok: true, data: { token: 'token', expiresAt: 123, role: 'staff' } }),
+        json: async () => ({ ok: true, data: { auth: { token: 'token', expiresAt: 123, role: 'staff' } } }),
       });
     vi.stubGlobal('fetch', fetchMock);
 
     const pending = new GoogleSheetsDataService('https://example.test/exec').authenticate('0000', 'staff');
     await vi.runAllTimersAsync();
 
-    await expect(pending).resolves.toMatchObject({ role: 'staff' });
+    await expect(pending).resolves.toMatchObject({ auth: { role: 'staff' } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,7 +3,7 @@ import type { AppConfig } from './types';
 export const appConfig: AppConfig = {
   teamName: import.meta.env.VITE_TEAM_NAME || 'Atlético Zabal Linense · Juvenil A',
   season: '2026-27',
-  sessionDurationMinutes: 30,
+  sessionDurationMinutes: 60,
   thresholds: {
     moderateFrom: 4,
     alertFrom: 7,
