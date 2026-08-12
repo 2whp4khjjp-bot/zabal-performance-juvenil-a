@@ -10,6 +10,7 @@ import { PlayerForm } from './components/PlayerForm';
 import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
 import { todayKey } from './utils/date';
+import { applyJuvenilRoster } from './utils/roster';
 import './styles.css';
 
 const TechnicalPanel = lazy(() => import('./components/TechnicalPanel').then((module) => ({ default: module.TechnicalPanel })));
@@ -74,10 +75,10 @@ export default function App() {
     if (!auth) return;
     setLoading(true);
     dataService.getBootstrap(auth.token).then(({ players: nextPlayers, measurements: nextMeasurements, session: nextSession }) => {
-      setPlayers(nextPlayers);
+      setPlayers(applyJuvenilRoster(nextPlayers));
       setMeasurements(nextMeasurements);
       setTrainingSession(nextSession);
-      if (auth.role === 'player') setSelectedPlayer(nextPlayers[0] ?? null);
+      if (auth.role === 'player') setSelectedPlayer(applyJuvenilRoster(nextPlayers)[0] ?? null);
     }).catch((cause: Error) => {
       setError(cause.message || 'No se pudieron cargar los datos.');
       if (/sesión|session|unauthorized/i.test(cause.message)) void logout();
@@ -85,7 +86,7 @@ export default function App() {
   }, [auth?.token]);
 
   useEffect(() => {
-    if (!auth || auth.role !== 'staff' || view !== 'matches' || matchesLoaded) return;
+    if (!auth || matchesLoaded || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
     setLoading(true);
     dataService.getMatches(auth.token)
       .then((nextMatches) => { setMatches(nextMatches); setMatchesLoaded(true); })
@@ -144,7 +145,7 @@ export default function App() {
     try {
       const saved = await dataService.saveMatch(auth.token, input);
       setMatches((current) => [saved, ...current]);
-      setToast('Partido y minutos guardados');
+      setToast('Partido, minutos y tarjetas guardados');
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar el partido.');
@@ -152,6 +153,19 @@ export default function App() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const setPlayerInjury = async (playerId: string, injured: boolean) => {
+    if (!auth || auth.role !== 'staff') return;
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await dataService.setPlayerInjury(auth.token, playerId, injured);
+      setPlayers((current) => applyJuvenilRoster(current.map((player) => player.id === updated.id ? updated : player)));
+      setToast(injured ? 'Jugador marcado como baja' : 'Jugador disponible de nuevo');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo cambiar el estado del jugador.');
+    } finally { setSaving(false); }
   };
 
   if (!auth) return (
@@ -168,11 +182,11 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
-      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} onInjuryChange={setPlayerInjury} saving={saving} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
+      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
-        {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} />}
+        {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       <SiteFooter />

@@ -134,8 +134,8 @@ export class LocalDataService implements DataService {
 
   async getMatches(token: string): Promise<MatchRecord[]> {
     const auth = this.requireSession(token);
-    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede consultar los partidos.', 'FORBIDDEN');
-    return readJson<MatchRecord[]>(MATCHES_KEY, []).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+    return auth.role === 'player' ? matches.map((match) => ({ ...match, minutes: match.minutes.filter((entry) => entry.playerId === auth.playerId) })) : matches;
   }
 
   async saveMatch(token: string, input: MatchInput): Promise<MatchRecord> {
@@ -157,7 +157,11 @@ export class LocalDataService implements DataService {
         throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
       }
       seen.add(entry.playerId);
-      return { playerId: player.id, playerName: player.name, minutes: entry.minutes };
+      const yellowCards = entry.yellowCards ?? 0;
+      const redCards = entry.redCards ?? 0;
+      if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
+      if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
+      return { playerId: player.id, playerName: player.name, minutes: entry.minutes, yellowCards, redCards };
     });
     if (!minutes.length) throw new DataServiceError('Introduce los minutos de al menos un jugador.', 'VALIDATION');
     const now = new Date().toISOString();
@@ -169,5 +173,16 @@ export class LocalDataService implements DataService {
     matches.push(match);
     localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
     return match;
+  }
+
+  async setPlayerInjury(token: string, playerId: string, injured: boolean): Promise<Player> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede cambiar una baja.', 'FORBIDDEN');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const index = players.findIndex((player) => player.id === playerId);
+    if (index < 0) throw new DataServiceError('Jugador no válido.', 'INVALID_PLAYER');
+    players[index] = { ...players[index], injured };
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+    return players[index];
   }
 }

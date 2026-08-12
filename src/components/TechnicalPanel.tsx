@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownAZ, CalendarDays, Download, FileDown, Filter, Search, TrendingUp, UsersRound } from 'lucide-react';
-import type { AlertLevel, Measurement, Player, ReportKind } from '../types';
+import type { AlertLevel, MatchRecord, Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { average, getAlertLevel, recentForPlayer, weightChange } from '../utils/measurements';
 import { exportCsv, exportExcel } from '../services/exports';
@@ -19,15 +19,24 @@ const initialFilters: Filters = { query: '', playerId: '', from: '', to: '', min
 
 const statusText: Record<AlertLevel, string> = { pending: 'Pendiente', partial: 'Parcial', normal: 'Normal', moderate: 'Moderado', alert: 'Alerta' };
 
-export function TechnicalPanel({ players, measurements }: { players: Player[]; measurements: Measurement[] }) {
+export function TechnicalPanel({ players, measurements, matches }: { players: Player[]; measurements: Measurement[]; matches: MatchRecord[] }) {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
   const [individualId, setIndividualId] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const todayItems = measurements.filter((item) => item.date === todayKey());
   const registeredIds = new Set(todayItems.map((item) => item.playerId));
   const alerts = todayItems.filter((item) => getAlertLevel(item) === 'alert');
   const relevantWeightChanges = players.map((player) => ({ player, change: weightChange(recentForPlayer(measurements, player.id)) })).filter((item) => Math.abs(item.change) >= 1.5);
+  const injuryCount = players.filter((player) => player.injured).length;
+  const availablePlayers = players.filter((player) => !player.injured);
+  const registeredAvailable = new Set(availablePlayers.filter((player) => registeredIds.has(player.id)).map((player) => player.id));
+  const disciplineAlerts = players.map((player) => {
+    const yellowCards = matches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.yellowCards ?? 0), 0);
+    const redCards = matches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.redCards ?? 0), 0);
+    return { player, yellowCards, redCards };
+  }).filter((item) => item.redCards > 0 || (item.yellowCards > 0 && item.yellowCards % 5 === 4));
 
   const filtered = useMemo(() => {
     const toNumber = (value: string) => value ? Number(value.replace(',', '.')) : null;
@@ -72,17 +81,17 @@ export function TechnicalPanel({ players, measurements }: { players: Player[]; m
       </div>
 
       <section className="metric-grid" aria-label="Resumen del día">
-        <article><span className="metric-icon metric-icon--blue"><UsersRound /></span><div><small>Registrados hoy</small><strong>{registeredIds.size}<span>/{players.length}</span></strong><em>{players.length - registeredIds.size} pendientes</em></div></article>
+        <article><span className="metric-icon metric-icon--blue"><UsersRound /></span><div><small>Registrados hoy</small><strong>{registeredAvailable.size}<span>/{availablePlayers.length}</span></strong><em>{availablePlayers.length - registeredAvailable.size} pendientes · {injuryCount} bajas</em></div></article>
         <article><span className="metric-icon metric-icon--yellow"><AlertTriangle /></span><div><small>Alertas de fatiga</small><strong>{todayItems.filter((item) => (item.fatigue ?? 0) >= 7).length}</strong><em>{todayItems.filter((item) => (item.fatigue ?? 0) >= 4 && (item.fatigue ?? 0) < 7).length} moderadas</em></div></article>
         <article><span className="metric-icon metric-icon--red"><AlertTriangle /></span><div><small>Alertas de molestias</small><strong>{todayItems.filter((item) => (item.soreness ?? 0) >= 7).length}</strong><em>{todayItems.filter((item) => (item.soreness ?? 0) >= 4 && (item.soreness ?? 0) < 7).length} moderadas</em></div></article>
-        <article><span className="metric-icon metric-icon--green"><TrendingUp /></span><div><small>Cambios de peso</small><strong>{relevantWeightChanges.length}</strong><em>≥ 1,5 kg entre controles</em></div></article>
+        <article><span className="metric-icon metric-icon--green"><TrendingUp /></span><div><small>Bajas / sanciones</small><strong>{injuryCount + disciplineAlerts.length}</strong><em>{injuryCount} lesionados · {disciplineAlerts.length} disciplinarias</em></div></article>
       </section>
 
       <section className="technical-split">
         <article className="panel-card session-progress">
-          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Sesión actual</p><h2>Progreso de registro</h2></div><strong>{players.length ? Math.round((registeredIds.size / players.length) * 100) : 0}%</strong></div>
-          <div className="progress-track"><span style={{ width: `${players.length ? (registeredIds.size / players.length) * 100 : 0}%` }} /></div>
-          <div className="progress-legend"><span><i className="dot dot--green" /> {registeredIds.size} registrados</span><span><i className="dot" /> {players.length - registeredIds.size} pendientes</span></div>
+          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Sesión actual</p><h2>Progreso de registro</h2></div><strong>{availablePlayers.length ? Math.round((registeredAvailable.size / availablePlayers.length) * 100) : 0}%</strong></div>
+          <div className="progress-track"><span style={{ width: `${availablePlayers.length ? (registeredAvailable.size / availablePlayers.length) * 100 : 0}%` }} /></div>
+          <div className="progress-legend"><span><i className="dot dot--green" /> {registeredAvailable.size} registrados</span><span><i className="dot" /> {availablePlayers.length - registeredAvailable.size} pendientes</span></div>
         </article>
         <article className="panel-card alerts-list">
           <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Revisión prioritaria</p><h2>Alertas de hoy</h2></div><span className="count-badge">{alerts.length}</span></div>
@@ -90,7 +99,14 @@ export function TechnicalPanel({ players, measurements }: { players: Player[]; m
         </article>
       </section>
 
-      <section className="panel-card filters-card">
+      {disciplineAlerts.length > 0 && <section className="panel-card discipline-alerts-card">
+        <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Disciplina</p><h2>Alertas de tarjetas</h2></div><span className="count-badge">{disciplineAlerts.length}</span></div>
+        {disciplineAlerts.map((item) => <div className="alert-row discipline-alert-row" key={item.player.id}><span>{item.player.name}</span><strong><span className="card-mark card-mark--yellow" /> {item.yellowCards}</strong><strong><span className="card-mark card-mark--red" /> {item.redCards}</strong>{item.yellowCards % 5 === 4 && <em>A una amarilla de sanción</em>}</div>)}
+      </section>}
+
+      <div className="history-toggle-row"><button className="button button--secondary" onClick={() => setShowHistory((value) => !value)}>{showHistory ? 'Ocultar histórico de mediciones' : 'Ver histórico de mediciones'}</button></div>
+
+      {showHistory && <><section className="panel-card filters-card">
         <div className="filter-topline">
           <div className="search-field"><Search size={19} /><input value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} placeholder="Buscar jugador o comentario…" aria-label="Buscar mediciones" /></div>
           <select value={filters.playerId} onChange={(event) => setFilters({ ...filters, playerId: event.target.value })} aria-label="Filtrar por jugador"><option value="">Todos los jugadores</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select>
@@ -121,7 +137,7 @@ export function TechnicalPanel({ players, measurements }: { players: Player[]; m
           </table>
         </div>
         {!filtered.length && <div className="empty-state compact"><h3>No hay mediciones para estos filtros</h3><button className="text-button" onClick={() => setFilters(initialFilters)}>Restablecer filtros</button></div>}
-      </section>
+      </section></>}
 
       <section className="technical-split insights-section">
         <article className="panel-card individual-card">

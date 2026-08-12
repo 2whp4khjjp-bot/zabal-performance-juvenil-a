@@ -5,6 +5,7 @@ export type Player = {
   active: boolean;
   order: number;
   joinedAt: string;
+  injured?: boolean;
 };
 
 export type Measurement = {
@@ -87,6 +88,14 @@ export type MatchMinutes = {
   playerId: string;
   playerName: string;
   minutes: number;
+  yellowCards?: number;
+  redCards?: number;
+};
+
+export type PlayerDiscipline = {
+  playerId: string;
+  yellowCards: number;
+  redCards: number;
 };
 
 export type MatchRecord = {

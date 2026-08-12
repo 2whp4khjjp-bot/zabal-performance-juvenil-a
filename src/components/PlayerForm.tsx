@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, CalendarDays, ChevronDown, ChevronUp, History, Save, Scale, TrendingDown, TrendingUp } from 'lucide-react';
-import type { AuthRole, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import { ArrowLeft, CalendarDays, ChevronDown, ChevronUp, History, Save, Scale, ShieldX, TrendingDown, TrendingUp } from 'lucide-react';
+import type { AuthRole, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { formatDate, todayKey } from '../utils/date';
 import { average, parseWeight, recentForPlayer, weightChange } from '../utils/measurements';
 import { Sparkline } from './Sparkline';
@@ -8,6 +8,7 @@ import { Sparkline } from './Sparkline';
 type FormProps = {
   player: Player;
   measurements: Measurement[];
+  matches: MatchRecord[];
   session: TrainingSession;
   saving: boolean;
   onSave: (input: MeasurementInput) => Promise<boolean>;
@@ -54,7 +55,7 @@ function ScorePicker({ label, value, onChange }: { label: string; value: number 
   );
 }
 
-export function PlayerForm({ player, measurements, session, saving, onSave, onBack, role, selectedDate, onDateChange }: FormProps) {
+export function PlayerForm({ player, measurements, matches, session, saving, onSave, onBack, role, selectedDate, onDateChange }: FormProps) {
   const measurementDate = role === 'staff' ? selectedDate : todayKey();
   const existing = measurements.find((item) => item.playerId === player.id && item.date === measurementDate);
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
@@ -97,6 +98,23 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
   };
 
   const change = weightChange(history);
+  const discipline = matches.reduce((totals, match) => {
+    const entry = match.minutes.find((item) => item.playerId === player.id);
+    return { yellow: totals.yellow + (entry?.yellowCards ?? 0), red: totals.red + (entry?.redCards ?? 0) };
+  }, { yellow: 0, red: 0 });
+  const sanctionWarning = discipline.yellow > 0 && discipline.yellow % 5 === 4;
+
+  if (player.injured) return (
+    <main className="page-shell form-page">
+      {role === 'staff' && <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Volver al listado</button>}
+      <section className="injury-blocked-state">
+        <ShieldX size={46} />
+        <p className="eyebrow eyebrow--dark">Baja por lesión</p>
+        <h1>{player.name}</h1>
+        <p>El pesaje y las molestias están desactivados hasta que el cuerpo técnico vuelva a marcar al jugador como disponible.</p>
+      </section>
+    </main>
+  );
 
   return (
     <main className="page-shell form-page">
@@ -105,6 +123,11 @@ export function PlayerForm({ player, measurements, session, saving, onSave, onBa
         <div className="player-avatar">{player.number ?? '—'}</div>
         <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(measurementDate)}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando una medición existente</span>}</div>
       </div>
+      {(discipline.yellow > 0 || discipline.red > 0) && <section className={`discipline-profile-alert ${sanctionWarning ? 'discipline-profile-alert--danger' : ''}`}>
+        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellow} amarillas</strong>
+        <span className="card-mark card-mark--red" /> <strong>{discipline.red} rojas</strong>
+        {sanctionWarning && <em>Alerta: a una amarilla de sanción</em>}
+      </section>}
 
       <div className="form-layout">
         <form className="measurement-form" onSubmit={submit} noValidate>

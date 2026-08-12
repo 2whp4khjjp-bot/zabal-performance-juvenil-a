@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, CheckCircle2, CircleDashed, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, CircleDashed, Search, ShieldAlert, XCircle } from 'lucide-react';
 import type { DashboardFilter, Measurement, Player } from '../types';
 import { formatDate, todayKey } from '../utils/date';
 import { alertLabel, getAlertLevel } from '../utils/measurements';
@@ -9,6 +9,8 @@ type PlayerGridProps = {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onSelect: (player: Player) => void;
+  onInjuryChange: (playerId: string, injured: boolean) => void;
+  saving: boolean;
   filter: DashboardFilter;
   onFilterChange: (filter: DashboardFilter) => void;
   query: string;
@@ -23,13 +25,15 @@ const statusIcon = {
   alert: ShieldAlert,
 };
 
-export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
+export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, onInjuryChange, saving, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
   const today = todayKey();
   const measurementsByPlayer = new Map(measurements.filter((item) => item.date === selectedDate).map((item) => [item.playerId, item]));
-  const registered = measurementsByPlayer.size;
+  const availablePlayers = players.filter((player) => !player.injured);
+  const registered = availablePlayers.filter((player) => measurementsByPlayer.has(player.id)).length;
+  const pending = availablePlayers.length - registered;
   const filtered = players.filter((player) => {
     const hasMeasurement = measurementsByPlayer.has(player.id);
-    const matchesFilter = filter === 'all' || (filter === 'registered' ? hasMeasurement : !hasMeasurement);
+    const matchesFilter = filter === 'all' || (filter === 'registered' ? hasMeasurement : !hasMeasurement && !player.injured);
     return matchesFilter && player.name.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es').trim());
   });
 
@@ -44,7 +48,7 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
         <div className="summary-counters" aria-label="Resumen de la sesión">
           <div><span>{players.length}</span><small>Plantilla</small></div>
           <div className="summary-counters__ok"><span>{registered}</span><small>Registrados</small></div>
-          <div className="summary-counters__pending"><span>{players.length - registered}</span><small>Pendientes</small></div>
+          <div className="summary-counters__pending"><span>{pending}</span><small>Pendientes</small></div>
         </div>
       </div>
 
@@ -67,7 +71,7 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
         <div className="segmented-control">
           {([
             ['all', `Todos ${players.length}`],
-            ['pending', `Pendientes ${players.length - registered}`],
+            ['pending', `Pendientes ${pending}`],
             ['registered', `Registrados ${registered}`],
           ] as const).map(([value, label]) => (
             <button key={value} className={filter === value ? 'active' : ''} onClick={() => onFilterChange(value)} aria-pressed={filter === value}>{label}</button>
@@ -82,20 +86,27 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
             const level = getAlertLevel(measurement);
             const Icon = statusIcon[level];
             return (
-              <button
-                key={player.id}
-                data-testid={`player-${player.id}`}
-                className={`player-card player-card--${level}`}
-                onClick={() => onSelect(player)}
-                aria-label={`${player.name}, ${alertLabel[level]}`}
-              >
-                <span className="player-card__number">{player.number ?? '—'}</span>
-                <span className="player-card__body">
-                  <strong>{player.name}</strong>
-                  <span className="player-card__status"><Icon size={17} /> {alertLabel[level]}</span>
-                </span>
-                {measurement && <span className="player-card__values">F {measurement.fatigue ?? '—'} · M {measurement.soreness ?? '—'}</span>}
-              </button>
+              <article key={player.id} className={`player-card player-card--${level} ${player.injured ? 'player-card--injured' : ''}`}>
+                <button
+                  type="button"
+                  data-testid={`player-${player.id}`}
+                  className="player-card__main"
+                  disabled={player.injured}
+                  onClick={() => onSelect(player)}
+                  aria-label={`${player.name}, ${player.injured ? 'baja por lesión' : alertLabel[level]}`}
+                >
+                  <span className="player-card__number">{player.number ?? '—'}</span>
+                  <span className="player-card__body">
+                    <strong>{player.name}</strong>
+                    <span className="player-card__status">{player.injured ? <><XCircle size={17} /> Baja por lesión</> : <><Icon size={17} /> {alertLabel[level]}</>}</span>
+                  </span>
+                  {measurement && <span className="player-card__values">F {measurement.fatigue ?? '—'} · M {measurement.soreness ?? '—'}</span>}
+                </button>
+                <label className="player-card__injury-control">
+                  <input type="checkbox" checked={Boolean(player.injured)} disabled={saving} onChange={(event) => onInjuryChange(player.id, event.target.checked)} aria-label={`${player.injured ? 'Dar de alta a' : 'Marcar como baja a'} ${player.name}`} />
+                  <span>{player.injured ? 'Activar' : 'Baja'}</span>
+                </label>
+              </article>
             );
           })}
         </section>

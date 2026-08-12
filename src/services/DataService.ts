@@ -10,6 +10,7 @@ export interface DataService {
   saveMeasurement(token: string, input: MeasurementInput): Promise<Measurement>;
   getMatches(token: string): Promise<MatchRecord[]>;
   saveMatch(token: string, input: MatchInput): Promise<MatchRecord>;
+  setPlayerInjury(token: string, playerId: string, injured: boolean): Promise<Player>;
 }
 
 export class DataServiceError extends Error {

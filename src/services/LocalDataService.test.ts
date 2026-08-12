@@ -41,6 +41,8 @@ describe('servicio local', () => {
     expect((await service.getMatches(staff.token))[0].minutes[0].minutes).toBe(74);
 
     const player = await service.authenticate('1001', 'player');
-    await expect(service.getMatches(player.token)).rejects.toThrow('cuerpo técnico');
+    const playerMatches = await service.getMatches(player.token);
+    expect(playerMatches).toHaveLength(1);
+    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', minutes: 74, yellowCards: 0, redCards: 0 }]);
   });
 });
