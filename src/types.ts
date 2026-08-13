@@ -6,7 +6,19 @@ export type Player = {
   order: number;
   joinedAt: string;
   injured?: boolean;
+  injuries?: InjuryPeriod[];
   staffMember?: boolean;
+};
+
+export type InjuryPeriod = {
+  id: string;
+  startDate: string;
+  endDate?: string;
+};
+
+export type InjuryInput = {
+  startDate: string;
+  endDate?: string;
 };
 
 export type Measurement = {

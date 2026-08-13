@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AuthRole, AuthSession, DashboardFilter, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AuthRole, AuthSession, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -252,17 +252,23 @@ export default function App() {
     } finally { setSaving(false); }
   };
 
-  const setPlayerInjury = async (playerId: string, injured: boolean) => {
-    if (!auth || auth.role !== 'staff') return;
+  const setPlayerInjury = async (playerId: string, injury: InjuryInput) => {
+    if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
     setError('');
     try {
-      const updated = await dataService.setPlayerInjury(auth.token, playerId, injured);
-      setPlayers((current) => applyJuvenilRoster(current.map((player) => player.id === updated.id ? updated : player)));
+      const updated = await dataService.setPlayerInjury(auth.token, playerId, injury);
+      setPlayers((current) => {
+        const next = applyJuvenilRoster(current.map((player) => player.id === updated.id ? updated : player));
+        if (trainingSession) saveRosterCache(auth, next, trainingSession);
+        return next;
+      });
       setSelectedPlayer((current) => current?.id === updated.id ? { ...current, ...updated } : current);
-      setToast(injured ? 'Jugador marcado como baja' : 'Jugador disponible de nuevo');
+      setToast(updated.injured ? 'Periodo de baja guardado' : 'Baja finalizada y jugador disponible');
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo cambiar el estado del jugador.');
+      return false;
     } finally { setSaving(false); }
   };
 

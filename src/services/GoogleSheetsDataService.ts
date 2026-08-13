@@ -1,4 +1,4 @@
-import type { AuthRole, BootstrapData, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -100,7 +100,7 @@ export class GoogleSheetsDataService implements DataService {
     return this.request<boolean>('deleteMatch', { token, matchId });
   }
 
-  setPlayerInjury(token: string, playerId: string, injured: boolean) {
-    return this.request<Player>('setPlayerInjury', { token, playerId, injured });
+  setPlayerInjury(token: string, playerId: string, injury: InjuryInput) {
+    return this.request<Player>('setPlayerInjury', { token, playerId, injury });
   }
 }

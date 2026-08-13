@@ -2,6 +2,7 @@ import { appConfig } from '../config';
 import type { Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { getAlertLevel } from '../utils/measurements';
+import { totalInjuryDays } from '../utils/injuries';
 
 type ReportOptions = { kind: ReportKind; measurements: Measurement[]; players: Player[]; playerId?: string };
 type PdfDocument = import('jspdf').jsPDF;
@@ -103,7 +104,13 @@ function drawPlayerBlock(doc: PdfDocument, player: Player, measurements: Measure
   const latestText = latest
     ? `Último control ${latest.date}   ·   Peso ${latest.weight ?? '—'} kg   ·   Fatiga ${latest.fatigue ?? '—'}   ·   Molestias ${latest.soreness ?? '—'}`
     : 'Todavía no hay controles registrados para este jugador.';
-  doc.text(latestText, 16, top + 22);
+  doc.text(latestText, 16, top + 22, { maxWidth: 105 });
+  const injuryText = player.injuries?.length
+    ? `Bajas: ${totalInjuryDays(player)} días en ${player.injuries.length} periodo${player.injuries.length === 1 ? '' : 's'}${player.injured ? ' · BAJA ACTIVA' : ''}`
+    : 'Bajas: sin periodos registrados';
+  doc.setFont('helvetica', player.injured ? 'bold' : 'normal');
+  doc.setTextColor(player.injured ? 174 : 95, player.injured ? 46 : 108, player.injured ? 59 : 124);
+  doc.text(injuryText, 192, top + 22, { align: 'right' });
 
   drawTrendChart(doc, `Tendencia semanal · ${weekly.length} controles`, weekly, 16, top + 29, 178, 40);
   drawTrendChart(doc, `Tendencia mensual · ${monthly.length} controles`, monthly, 16, top + 73, 178, 40);
@@ -162,14 +169,23 @@ export const generatePdfReport = async ({ kind, measurements, players, playerId 
   doc.setFontSize(9);
   doc.text(`${appConfig.teamName} · Generado ${new Date().toLocaleString('es-ES')}`, 14, 46);
 
+  const reportPlayers = kind === 'player' ? players.filter((player) => player.id === playerId) : players;
+  const injurySummary = reportPlayers.filter((player) => (player.injuries?.length ?? 0) > 0).map((player) => `${player.name}: ${totalInjuryDays(player)} días${player.injured ? ' (activa)' : ''}`);
+
   const registered = new Set(items.map((item) => item.playerId)).size;
   const alerts = items.filter((item) => getAlertLevel(item) === 'alert').length;
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text(`Mediciones: ${items.length}   Jugadores: ${registered}/${players.length}   Alertas: ${alerts}`, 14, 57);
+  if (injurySummary.length) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(115, 61, 68);
+    doc.text(`Bajas: ${injurySummary.join(' · ')}`, 14, 62, { maxWidth: 182 });
+  }
 
   autoTable(doc, {
-    startY: 64,
+    startY: injurySummary.length ? 69 : 64,
     head: [['Fecha', 'Jugador', 'Peso', 'Fatiga', 'Molestias', 'Comentarios']],
     body: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((item) => [item.date, item.playerName, item.weight !== undefined ? `${item.weight} kg` : '—', item.fatigue ?? '—', item.soreness ?? '—', item.comments || '—']),
     styles: { fontSize: 8, cellPadding: 2.5, overflow: 'linebreak' },

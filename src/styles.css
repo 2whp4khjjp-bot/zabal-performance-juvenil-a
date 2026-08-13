@@ -178,6 +178,14 @@ h1, h2, h3, .brand__name { font-family: 'Manrope', sans-serif; }
 .injury-form-control__icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #a4313d; background: #f7e1e4; }
 .injury-form-control > span:nth-child(2) { display: flex; flex-direction: column; gap: 3px; }
 .injury-form-control small { color: var(--muted); font-size: .75rem; font-weight: 600; }
+.injury-period-control { grid-template-columns: 42px minmax(0, 1fr); }
+.injury-date-fields { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid #e2e7ec; display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; }
+.injury-date-fields label { display: flex; flex-direction: column; gap: 5px; color: #526174; font-size: .76rem; font-weight: 800; }
+.injury-date-fields label small { font-size: .65rem; }
+.injury-date-fields input { height: 42px; padding: 0 10px; border: 1px solid #cbd6e1; border-radius: 8px; color: var(--navy); background: #fff; }
+.injury-date-error { grid-column: 1 / -1; margin: 0; color: #a4313d; font-size: .78rem; font-weight: 800; }
+.injury-history { grid-column: 1 / -1; padding: 11px 12px; border-radius: 9px; display: flex; flex-wrap: wrap; gap: 6px 14px; color: #6a7887; background: rgba(255,255,255,.7); font-size: .73rem; }
+.injury-history strong { width: 100%; color: var(--navy); }
 .switch-control { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .switch-control input { position: absolute; opacity: 0; pointer-events: none; }
 .switch-control > span { width: 44px; height: 25px; padding: 3px; border-radius: 14px; background: #bdc8d3; transition: background .18s; }
@@ -519,6 +527,7 @@ tbody tr:hover { background: #f8fafc; }
   .recent-match-actions { grid-column: 2 / -1; justify-self: end; }
   .injury-form-control { grid-template-columns: 38px minmax(0, 1fr); }
   .injury-form-control .switch-control { grid-column: 1 / -1; justify-self: end; }
+  .injury-date-fields { grid-template-columns: 1fr; }
   .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 44px 44px 44px 44px; grid-template-areas: 'number name name called starter minutes' '. . goals yellow red .'; row-gap: 7px; }
   .match-player-number { grid-area: number; }
   .match-player-name { grid-area: name; }

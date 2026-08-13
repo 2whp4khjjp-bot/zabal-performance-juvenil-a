@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowLeft, CalendarDays, ChevronDown, ChevronUp, History, Save, Scale, ShieldX, TrendingDown, TrendingUp } from 'lucide-react';
-import type { AuthRole, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, InjuryInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { formatDate, todayKey } from '../utils/date';
 import { average, parseWeight, recentForPlayer, weightChange } from '../utils/measurements';
 import { Sparkline } from './Sparkline';
+import { injuryPeriodDays, totalInjuryDays } from '../utils/injuries';
 
 type FormProps = {
   player: Player;
@@ -12,7 +13,7 @@ type FormProps = {
   session: TrainingSession;
   saving: boolean;
   onSave: (input: MeasurementInput) => Promise<boolean>;
-  onInjuryChange: (playerId: string, injured: boolean) => void;
+  onInjuryChange: (playerId: string, injury: InjuryInput) => Promise<boolean>;
   onBack: () => void;
   role: AuthRole;
   selectedDate: string;
@@ -62,6 +63,10 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
   const [errors, setErrors] = useState<string[]>([]);
   const [showEvolution, setShowEvolution] = useState(false);
+  const activeInjury = player.injuries?.find((period) => !period.endDate);
+  const [injuryStartDate, setInjuryStartDate] = useState(activeInjury?.startDate || todayKey());
+  const [injuryEndDate, setInjuryEndDate] = useState('');
+  const [injuryError, setInjuryError] = useState('');
   const history = useMemo(() => recentForPlayer(measurements, player.id), [measurements, player.id]);
 
   useEffect(() => {
@@ -69,6 +74,13 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
     setErrors([]);
     setShowEvolution(false);
   }, [player.id, measurementDate]);
+
+  useEffect(() => {
+    const active = player.injuries?.find((period) => !period.endDate);
+    setInjuryStartDate(active?.startDate || todayKey());
+    setInjuryEndDate('');
+    setInjuryError('');
+  }, [player.id, player.injuries]);
 
   useEffect(() => {
     localStorage.setItem(draftKey(player.id, measurementDate), JSON.stringify(draft));
@@ -118,14 +130,16 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         {sanctionWarning && <em>Alerta: a una amarilla de sanción</em>}
       </section>}
 
-      {role === 'staff' && <section className={`injury-form-control ${player.injured ? 'injury-form-control--active' : ''}`}>
+      {role === 'staff' && <section className={`injury-form-control injury-period-control ${player.injured ? 'injury-form-control--active' : ''}`}>
         <span className="injury-form-control__icon"><ShieldX size={24} /></span>
-        <span><strong>Baja por lesión</strong><small>Desactiva temporalmente el pesaje, la fatiga y las molestias.</small></span>
-        <label className="switch-control">
-          <input type="checkbox" checked={Boolean(player.injured)} disabled={saving} onChange={(event) => onInjuryChange(player.id, event.target.checked)} />
-          <span aria-hidden="true" />
-          <em>{player.injured ? 'Sí' : 'No'}</em>
-        </label>
+        <span><strong>{player.injured ? 'Baja por lesión activa' : 'Registrar periodo de baja'}</strong><small>Las fechas se conservarán y se incluirán en los informes.</small></span>
+        <div className="injury-date-fields">
+          <label>Fecha de inicio<input type="date" max={todayKey()} value={injuryStartDate} onChange={(event) => { setInjuryStartDate(event.target.value); setInjuryError(''); }} /></label>
+          <label>Fecha final <small>{player.injured ? 'Rellénala al recibir el alta' : 'Opcional'}</small><input type="date" min={injuryStartDate} max={todayKey()} value={injuryEndDate} onChange={(event) => { setInjuryEndDate(event.target.value); setInjuryError(''); }} /></label>
+          <button type="button" className="button button--secondary" disabled={saving || !injuryStartDate} onClick={() => { if (injuryEndDate && injuryEndDate < injuryStartDate) { setInjuryError('La fecha final no puede ser anterior al inicio.'); return; } void onInjuryChange(player.id, { startDate: injuryStartDate, endDate: injuryEndDate || undefined }); }}><Save size={17} /> {player.injured ? injuryEndDate ? 'Finalizar baja' : 'Actualizar baja' : 'Guardar baja'}</button>
+        </div>
+        {injuryError && <p className="injury-date-error">{injuryError}</p>}
+        {(player.injuries?.length ?? 0) > 0 && <div className="injury-history"><strong>Historial · {totalInjuryDays(player)} días de baja</strong>{player.injuries!.map((period) => <span key={period.id}>{formatDate(period.startDate)} → {period.endDate ? formatDate(period.endDate) : 'actualidad'} · {injuryPeriodDays(period)} días</span>)}</div>}
       </section>}
 
       {player.injured ? <section className="injury-blocked-state injury-blocked-state--inline">

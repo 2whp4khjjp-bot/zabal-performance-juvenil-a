@@ -18,7 +18,8 @@ type Props = {
 const typeLabel = (type: MatchType) => type === 'official' ? 'Oficial' : 'Amistoso';
 
 export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDelete }: Props) {
-  const eligiblePlayers = useMemo(() => players.filter((player) => !player.staffMember && !player.injured), [players]);
+  const allPlayers = useMemo(() => players.filter((player) => !player.staffMember), [players]);
+  const eligiblePlayers = useMemo(() => allPlayers.filter((player) => !player.injured), [allPlayers]);
   const [mode, setMode] = useState<'new' | 'history' | 'stats'>('new');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [date, setDate] = useState(todayKey());
@@ -33,6 +34,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [yellowByPlayer, setYellowByPlayer] = useState<Record<string, string>>({});
   const [redByPlayer, setRedByPlayer] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const formPlayers = editingId ? allPlayers : eligiblePlayers;
 
   useEffect(() => {
     if (editingId) return;
@@ -41,8 +43,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
 
   const duration = durationOption === 'custom' ? Number(customDuration) : Number(durationOption);
   const enteredValues = Object.values(minutesByPlayer).filter((value) => value !== '');
-  const enteredCount = eligiblePlayers.filter((player) => calledUpByPlayer[player.id]).length;
-  const starterCount = eligiblePlayers.filter((player) => starterByPlayer[player.id]).length;
+  const enteredCount = formPlayers.filter((player) => calledUpByPlayer[player.id]).length;
+  const starterCount = formPlayers.filter((player) => starterByPlayer[player.id]).length;
   const totalEnteredMinutes = enteredValues.reduce((sum, value) => sum + (Number(value) || 0), 0);
 
   const totals = useMemo(() => {
@@ -59,7 +61,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       total.redCards += entry.redCards ?? 0;
       if (entry.minutes > 0) total.appearances += 1;
     }));
-    return [...byPlayer.values()].filter((item) => item.callUps || item.starts || item.appearances || item.minutes || item.goals || item.yellowCards || item.redCards).sort((a, b) => (a.player.number ?? 999) - (b.player.number ?? 999) || a.player.order - b.player.order);
+    return [...byPlayer.values()].sort((a, b) => (a.player.number ?? 999) - (b.player.number ?? 999) || a.player.order - b.player.order);
   }, [matches, players]);
 
   const rankings = useMemo(() => ({
@@ -77,7 +79,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     if (!Number.isInteger(duration) || duration < 1 || duration > 180) next.push('La duración debe estar entre 1 y 180 minutos.');
     if (!enteredCount) next.push('Marca como convocado al menos a un jugador.');
     if (starterCount > appConfig.maxStarters) next.push(`Puedes marcar como máximo ${appConfig.maxStarters} titulares.`);
-    eligiblePlayers.forEach((player) => {
+    formPlayers.forEach((player) => {
       const raw = minutesByPlayer[player.id];
       if (raw !== undefined && raw !== '') {
         const value = Number(raw);
@@ -102,7 +104,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       type,
       opponent: opponent.trim(),
       durationMinutes: duration,
-      minutes: eligiblePlayers.map((player) => {
+      minutes: formPlayers.map((player) => {
         const raw = minutesByPlayer[player.id];
         const goals = Number(goalsByPlayer[player.id] || 0);
         const yellowCards = Number(yellowByPlayer[player.id] || 0);
@@ -129,7 +131,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     setEditingId(match.id); setDate(match.date); setType(match.type); setOpponent(match.opponent);
     const option = durationOptions.includes(match.durationMinutes as typeof durationOptions[number]) ? String(match.durationMinutes) : 'custom';
     setDurationOption(option); setCustomDuration(String(match.durationMinutes));
-    setCalledUpByPlayer(Object.fromEntries(eligiblePlayers.map((player) => [player.id, Boolean(match.minutes.find((entry) => entry.playerId === player.id)?.calledUp)])));
+    setCalledUpByPlayer(Object.fromEntries(allPlayers.map((player) => [player.id, Boolean(match.minutes.find((entry) => entry.playerId === player.id)?.calledUp)])));
     setStarterByPlayer(Object.fromEntries(match.minutes.filter((entry) => entry.starter).map((entry) => [entry.playerId, true])));
     setMinutesByPlayer(Object.fromEntries(match.minutes.filter((entry) => entry.minutes > 0).map((entry) => [entry.playerId, String(entry.minutes)])));
     setGoalsByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.goals ?? 0) > 0).map((entry) => [entry.playerId, String(entry.goals)])));
@@ -172,7 +174,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
             <span className="duration-badge"><Clock3 size={16} /> Máximo {Number.isFinite(duration) ? duration : '—'}</span>
           </div>
           <div className="match-player-list">
-            {eligiblePlayers.map((player) => <label className="match-player-row" key={player.id}>
+            {formPlayers.map((player) => <label className="match-player-row" key={player.id}>
               <span className="match-player-number">{player.number ?? player.order}</span>
               <span className="match-player-name">{player.name}</span>
               <span className={`match-called-up ${calledUpByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(calledUpByPlayer[player.id])} onChange={(event) => { const checked = event.target.checked; setCalledUpByPlayer((current) => ({ ...current, [player.id]: checked })); if (!checked) setStarterByPlayer((current) => ({ ...current, [player.id]: false })); setErrors([]); }} aria-label={`Convocado: ${player.name}`} /><Check size={16} /><small>Conv.</small></span>

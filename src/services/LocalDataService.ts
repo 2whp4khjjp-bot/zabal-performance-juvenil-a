@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AuthRole, AuthSession, BootstrapData, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AuthRole, AuthSession, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -206,13 +206,19 @@ export class LocalDataService implements DataService {
     return true;
   }
 
-  async setPlayerInjury(token: string, playerId: string, injured: boolean): Promise<Player> {
+  async setPlayerInjury(token: string, playerId: string, injury: InjuryInput): Promise<Player> {
     const auth = this.requireSession(token);
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede cambiar una baja.', 'FORBIDDEN');
     const players = readJson(PLAYERS_KEY, demoPlayers);
     const index = players.findIndex((player) => player.id === playerId);
     if (index < 0) throw new DataServiceError('Jugador no válido.', 'INVALID_PLAYER');
-    players[index] = { ...players[index], injured };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(injury.startDate) || (injury.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(injury.endDate) || injury.endDate < injury.startDate))) throw new DataServiceError('Revisa las fechas de la baja.', 'VALIDATION');
+    const periods = [...(players[index].injuries ?? [])];
+    const activeIndex = periods.findIndex((period) => !period.endDate);
+    const period = { id: activeIndex >= 0 ? periods[activeIndex].id : crypto.randomUUID(), startDate: injury.startDate, endDate: injury.endDate || undefined };
+    if (activeIndex >= 0) periods[activeIndex] = period;
+    else periods.push(period);
+    players[index] = { ...players[index], injured: !injury.endDate, injuries: periods };
     localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
     return players[index];
   }
