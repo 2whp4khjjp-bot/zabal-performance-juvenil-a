@@ -178,6 +178,7 @@ export default function App() {
     try {
       const updated = await dataService.setPlayerInjury(auth.token, playerId, injured);
       setPlayers((current) => applyJuvenilRoster(current.map((player) => player.id === updated.id ? updated : player)));
+      setSelectedPlayer((current) => current?.id === updated.id ? { ...current, ...updated } : current);
       setToast(injured ? 'Jugador marcado como baja' : 'Jugador disponible de nuevo');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo cambiar el estado del jugador.');
@@ -198,8 +199,8 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} onInjuryChange={setPlayerInjury} saving={saving} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
-      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
+      {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onInjuryChange={setPlayerInjury} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} />}

@@ -93,7 +93,9 @@ export type MatchType = 'official' | 'friendly';
 export type MatchMinutes = {
   playerId: string;
   playerName: string;
+  calledUp?: boolean;
   minutes: number;
+  goals?: number;
   yellowCards?: number;
   redCards?: number;
 };

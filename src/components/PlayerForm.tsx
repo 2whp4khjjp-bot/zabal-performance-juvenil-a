@@ -12,6 +12,7 @@ type FormProps = {
   session: TrainingSession;
   saving: boolean;
   onSave: (input: MeasurementInput) => Promise<boolean>;
+  onInjuryChange: (playerId: string, injured: boolean) => void;
   onBack: () => void;
   role: AuthRole;
   selectedDate: string;
@@ -55,7 +56,7 @@ function ScorePicker({ label, value, onChange }: { label: string; value: number 
   );
 }
 
-export function PlayerForm({ player, measurements, matches, session, saving, onSave, onBack, role, selectedDate, onDateChange }: FormProps) {
+export function PlayerForm({ player, measurements, matches, session, saving, onSave, onInjuryChange, onBack, role, selectedDate, onDateChange }: FormProps) {
   const measurementDate = role === 'staff' ? selectedDate : todayKey();
   const existing = measurements.find((item) => item.playerId === player.id && item.date === measurementDate);
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
@@ -104,18 +105,6 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   }, { yellow: 0, red: 0 });
   const sanctionWarning = discipline.yellow > 0 && discipline.yellow % 5 === 4;
 
-  if (player.injured) return (
-    <main className="page-shell form-page">
-      {role === 'staff' && <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Volver al listado</button>}
-      <section className="injury-blocked-state">
-        <ShieldX size={46} />
-        <p className="eyebrow eyebrow--dark">Baja por lesión</p>
-        <h1>{player.name}</h1>
-        <p>El pesaje y las molestias están desactivados hasta que el cuerpo técnico vuelva a marcar al jugador como disponible.</p>
-      </section>
-    </main>
-  );
-
   return (
     <main className="page-shell form-page">
       {role === 'staff' && <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Volver al listado</button>}
@@ -129,7 +118,21 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         {sanctionWarning && <em>Alerta: a una amarilla de sanción</em>}
       </section>}
 
-      <div className="form-layout">
+      {role === 'staff' && <section className={`injury-form-control ${player.injured ? 'injury-form-control--active' : ''}`}>
+        <span className="injury-form-control__icon"><ShieldX size={24} /></span>
+        <span><strong>Baja por lesión</strong><small>Desactiva temporalmente el pesaje, la fatiga y las molestias.</small></span>
+        <label className="switch-control">
+          <input type="checkbox" checked={Boolean(player.injured)} disabled={saving} onChange={(event) => onInjuryChange(player.id, event.target.checked)} />
+          <span aria-hidden="true" />
+          <em>{player.injured ? 'Sí' : 'No'}</em>
+        </label>
+      </section>}
+
+      {player.injured ? <section className="injury-blocked-state injury-blocked-state--inline">
+        <ShieldX size={38} />
+        <h2>Medición desactivada</h2>
+        <p>{role === 'staff' ? 'Desmarca «Baja por lesión» para volver a introducir sus datos.' : 'El cuerpo técnico ha marcado al jugador como baja por lesión.'}</p>
+      </section> : <div className="form-layout">
         <form className="measurement-form" onSubmit={submit} noValidate>
           {role === 'staff' && <section className="form-section historical-date-field">
             <label htmlFor="measurement-date"><CalendarDays size={20} /> Fecha de la medición</label>
@@ -186,7 +189,7 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
             </div>
           )}
         </aside>
-      </div>
+      </div>}
     </main>
   );
 }

@@ -35,7 +35,7 @@ describe('servicio local', () => {
     const players = await service.getPlayers(staff.token);
     const saved = await service.saveMatch(staff.token, {
       date: '2026-08-09', type: 'official', opponent: 'UD Los Barrios', durationMinutes: 90,
-      minutes: [{ playerId: players[0].id, playerName: players[0].name, minutes: 74 }],
+      minutes: [{ playerId: players[0].id, playerName: players[0].name, calledUp: true, minutes: 74, goals: 1 }],
     });
     expect(saved.durationMinutes).toBe(90);
     expect((await service.getMatches(staff.token))[0].minutes[0].minutes).toBe(74);
@@ -43,6 +43,6 @@ describe('servicio local', () => {
     const { auth: player } = await service.authenticate('1001', 'player');
     const playerMatches = await service.getMatches(player.token);
     expect(playerMatches).toHaveLength(1);
-    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', minutes: 74, yellowCards: 0, redCards: 0 }]);
+    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', calledUp: true, minutes: 74, goals: 1, yellowCards: 0, redCards: 0 }]);
   });
 });

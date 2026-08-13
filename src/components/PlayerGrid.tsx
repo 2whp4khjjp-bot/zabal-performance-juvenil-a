@@ -9,8 +9,6 @@ type PlayerGridProps = {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onSelect: (player: Player) => void;
-  onInjuryChange: (playerId: string, injured: boolean) => void;
-  saving: boolean;
   filter: DashboardFilter;
   onFilterChange: (filter: DashboardFilter) => void;
   query: string;
@@ -25,7 +23,7 @@ const statusIcon = {
   alert: ShieldAlert,
 };
 
-export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, onInjuryChange, saving, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
+export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
   const today = todayKey();
   const measurementsByPlayer = new Map(measurements.filter((item) => item.date === selectedDate).map((item) => [item.playerId, item]));
   const availablePlayers = players.filter((player) => !player.injured);
@@ -91,7 +89,6 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
                   type="button"
                   data-testid={`player-${player.id}`}
                   className="player-card__main"
-                  disabled={player.injured}
                   onClick={() => onSelect(player)}
                   aria-label={`${player.name}, ${player.injured ? 'baja por lesión' : alertLabel[level]}`}
                 >
@@ -103,10 +100,6 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
                   </span>
                   {measurement && <span className="player-card__values">F {measurement.fatigue ?? '—'} · M {measurement.soreness ?? '—'}</span>}
                 </button>
-                <label className="player-card__injury-control">
-                  <input type="checkbox" checked={Boolean(player.injured)} disabled={saving} onChange={(event) => onInjuryChange(player.id, event.target.checked)} aria-label={`${player.injured ? 'Dar de alta a' : 'Marcar como baja a'} ${player.name}`} />
-                  <span>{player.injured ? 'Activar' : 'Baja'}</span>
-                </label>
               </article>
             );
           })}

@@ -157,13 +157,17 @@ export class LocalDataService implements DataService {
         throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
       }
       seen.add(entry.playerId);
+      const calledUp = Boolean(entry.calledUp);
+      const goals = entry.goals ?? 0;
       const yellowCards = entry.yellowCards ?? 0;
       const redCards = entry.redCards ?? 0;
+      if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Revisa los goles de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
-      return { playerId: player.id, playerName: player.name, minutes: entry.minutes, yellowCards, redCards };
+      if (!calledUp && (entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
+      return { playerId: player.id, playerName: player.name, calledUp, minutes: entry.minutes, goals, yellowCards, redCards };
     });
-    if (!minutes.length) throw new DataServiceError('Introduce los minutos de al menos un jugador.', 'VALIDATION');
+    if (!minutes.some((entry) => entry.calledUp)) throw new DataServiceError('Marca como convocado al menos a un jugador.', 'VALIDATION');
     const now = new Date().toISOString();
     const match: MatchRecord = {
       id: crypto.randomUUID(), date: input.date, type: input.type, opponent,

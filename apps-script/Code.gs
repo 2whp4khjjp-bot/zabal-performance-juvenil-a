@@ -19,7 +19,7 @@ const HEADERS = {
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
-  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas'],
+  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles'],
 };
 
 function onOpen() {
@@ -237,7 +237,9 @@ function getMatches_(session) {
     minutesByMatch[matchId].push({
       playerId: String(row.jugador_id),
       playerName: String(row.jugador_nombre),
+      calledUp: hasValue_(row.convocado) ? boolean_(row.convocado) : Number(row.minutos || 0) > 0 || Number(row.amarillas || 0) > 0 || Number(row.rojas || 0) > 0,
       minutes: Number(row.minutos || 0),
+      goals: Number(row.goles || 0),
       yellowCards: Number(row.amarillas || 0),
       redCards: Number(row.rojas || 0),
     });
@@ -271,7 +273,7 @@ function saveMatch_(input, session) {
   if (!type) throw apiError_('El tipo de partido no es válido.', 'VALIDATION');
   if (!opponent) throw apiError_('Introduce el rival.', 'VALIDATION');
   if (!Number.isInteger(duration) || duration < 1 || duration > 180) throw apiError_('La duración del partido no es válida.', 'VALIDATION');
-  if (!entries.length) throw apiError_('Introduce minutos o tarjetas de al menos un jugador.', 'VALIDATION');
+  if (!entries.length) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
 
   const players = getPlayers_({ role: 'staff' });
   const playersById = {};
@@ -280,16 +282,21 @@ function saveMatch_(input, session) {
   const cleanEntries = entries.map(function(entry) {
     const playerId = String(entry.playerId || '');
     const player = playersById[playerId];
+    const calledUp = Boolean(entry.calledUp);
     const minutes = Number(entry.minutes);
+    const goals = Number(entry.goals || 0);
     const yellowCards = Number(entry.yellowCards || 0);
     const redCards = Number(entry.redCards || 0);
     if (!player || player.name !== String(entry.playerName || '') || seen[playerId]) throw apiError_('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > duration) throw apiError_('Los minutos de ' + player.name + ' no son válidos.', 'VALIDATION');
+    if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw apiError_('Los goles de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw apiError_('Las amarillas de ' + player.name + ' no son válidas.', 'VALIDATION');
     if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw apiError_('Las rojas de ' + player.name + ' no son válidas.', 'VALIDATION');
+    if (!calledUp && (minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
     seen[playerId] = true;
-    return { playerId: player.id, playerName: player.name, minutes: minutes, yellowCards: yellowCards, redCards: redCards };
+    return { playerId: player.id, playerName: player.name, calledUp: calledUp, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
   });
+  if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
 
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
@@ -297,7 +304,7 @@ function saveMatch_(input, session) {
     const id = Utilities.getUuid();
     const now = new Date();
     sheet_(SHEETS.MATCHES).appendRow([id, date, type, opponent, duration, now, now, 'cuerpo-tecnico']);
-    const minuteRows = cleanEntries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards]; });
+    const minuteRows = cleanEntries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
     const minutesSheet = sheet_(SHEETS.MATCH_MINUTES);
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
