@@ -18,6 +18,18 @@ const MatchesPanel = lazy(() => import('./components/MatchesPanel').then((module
 
 type View = 'players' | 'matches' | 'technical';
 
+type RosterCache = { players: Player[]; session: TrainingSession; savedAt: number };
+const rosterCacheKey = (auth: AuthSession) => `zabal-roster-v1-${auth.role}-${auth.playerId || 'staff'}`;
+const readRosterCache = (auth: AuthSession): RosterCache | null => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(rosterCacheKey(auth)) || 'null') as RosterCache | null;
+    return cached?.players?.length && cached.session ? cached : null;
+  } catch { return null; }
+};
+const saveRosterCache = (auth: AuthSession, players: Player[], session: TrainingSession) => {
+  try { localStorage.setItem(rosterCacheKey(auth), JSON.stringify({ players, session, savedAt: Date.now() })); } catch { /* La app sigue operativa sin caché. */ }
+};
+
 export default function App() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readAuthSession());
   const [remaining, setRemaining] = useState(() => auth ? remainingSeconds(auth.expiresAt) : 0);
@@ -75,16 +87,38 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return;
-    setLoading(true);
+    const cached = readRosterCache(auth);
+    if (cached) {
+      const cachedPlayers = applyJuvenilRoster(cached.players);
+      setPlayers(cachedPlayers);
+      setTrainingSession(cached.session);
+      if (auth.role === 'player') setSelectedPlayer(cachedPlayers[0] ?? null);
+      setLoading(false);
+    }
+    setLoading(!cached);
     dataService.getBootstrap(auth.token).then(({ players: nextPlayers, measurements: nextMeasurements, session: nextSession }) => {
-      setPlayers(applyJuvenilRoster(nextPlayers));
+      const roster = applyJuvenilRoster(nextPlayers);
+      setPlayers(roster);
       setMeasurements(nextMeasurements);
       setTrainingSession(nextSession);
       setHydratedToken(auth.token);
-      if (auth.role === 'player') setSelectedPlayer(applyJuvenilRoster(nextPlayers)[0] ?? null);
+      saveRosterCache(auth, roster, nextSession);
+      if (auth.role === 'player') setSelectedPlayer(roster[0] ?? null);
+      if (auth.role === 'staff') {
+        void dataService.getMeasurements(auth.token)
+          .then(setMeasurements)
+          .catch(() => setError('La plantilla está disponible, pero el histórico sigue cargándose.'));
+      }
     }).catch((cause: Error) => {
-      setError(cause.message || 'No se pudieron cargar los datos.');
-      if (/sesión|session|unauthorized/i.test(cause.message)) void logout();
+      const unauthorized = /sesión|session|unauthorized/i.test(cause.message);
+      if (unauthorized) {
+        void logout();
+        return;
+      }
+      if (cached) {
+        setHydratedToken(auth.token);
+        setError('Google está tardando en responder. Se muestra la última plantilla guardada y puedes volver a intentarlo recargando.');
+      } else setError(cause.message || 'No se pudieron cargar los datos.');
     }).finally(() => setLoading(false));
   }, [auth?.token, hydratedToken]);
 
@@ -114,6 +148,7 @@ export default function App() {
         setPlayers(nextPlayers);
         setMeasurements(bootstrap.measurements);
         setTrainingSession(bootstrap.session);
+        saveRosterCache(session, nextPlayers, bootstrap.session);
         setHydratedToken(session.token);
         if (role === 'player') setSelectedPlayer(nextPlayers[0] ?? null);
         if (role === 'staff') {

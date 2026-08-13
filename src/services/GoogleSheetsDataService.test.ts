@@ -23,4 +23,19 @@ describe('servicio remoto', () => {
     await expect(pending).resolves.toMatchObject({ auth: { role: 'staff' } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('limita cada intento para no dejar la pantalla bloqueada', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = new GoogleSheetsDataService('https://example.test/exec').getPlayers('token');
+    const expectation = expect(pending).rejects.toMatchObject({ code: 'OFFLINE' });
+    await vi.runAllTimersAsync();
+
+    await expectation;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

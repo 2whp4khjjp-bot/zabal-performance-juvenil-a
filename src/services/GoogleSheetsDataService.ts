@@ -12,6 +12,8 @@ export class GoogleSheetsDataService implements DataService {
     let response: Response | undefined;
     let serviceReached = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12000);
       try {
         const candidate = await fetch(this.endpoint, {
           method: 'POST',
@@ -20,6 +22,7 @@ export class GoogleSheetsDataService implements DataService {
           credentials: 'omit',
           redirect: 'follow',
           cache: 'no-store',
+          signal: controller.signal,
         });
         serviceReached = true;
         if (candidate.ok) {
@@ -28,6 +31,8 @@ export class GoogleSheetsDataService implements DataService {
         }
       } catch {
         // La redirección temporal de Apps Script puede fallar de forma puntual.
+      } finally {
+        window.clearTimeout(timeout);
       }
       if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 600 * (attempt + 1)));
     }

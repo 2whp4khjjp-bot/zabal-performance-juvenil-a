@@ -224,7 +224,9 @@ function getMeasurements_(session) {
 function getBootstrap_(session) {
   return {
     players: getPlayers_(session),
-    measurements: getMeasurements_(session),
+    // El histórico completo puede crecer mucho y no debe bloquear la entrada
+    // del cuerpo técnico a la plantilla. Se carga después, en segundo plano.
+    measurements: session.role === 'player' ? getMeasurements_(session) : [],
     session: getCurrentSession_(),
   };
 }
