@@ -36,6 +36,6 @@ describe('servicio remoto', () => {
     await vi.runAllTimersAsync();
 
     await expectation;
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

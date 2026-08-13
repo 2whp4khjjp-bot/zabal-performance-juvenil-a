@@ -11,9 +11,12 @@ export class GoogleSheetsDataService implements DataService {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');
     let response: Response | undefined;
     let serviceReached = false;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'setPlayerInjury'].includes(action);
+    const maxAttempts = isWrite ? 3 : 2;
+    const timeoutMs = isWrite ? 12000 : 8000;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 12000);
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
       try {
         const candidate = await fetch(this.endpoint, {
           method: 'POST',
@@ -34,7 +37,7 @@ export class GoogleSheetsDataService implements DataService {
       } finally {
         window.clearTimeout(timeout);
       }
-      if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 600 * (attempt + 1)));
+      if (attempt < maxAttempts - 1) await new Promise((resolve) => window.setTimeout(resolve, 600 * (attempt + 1)));
     }
     if (!response) {
       if (serviceReached) throw new DataServiceError('No se pudo contactar con el servicio de datos.', 'NETWORK');

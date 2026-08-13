@@ -19,7 +19,9 @@ const MatchesPanel = lazy(() => import('./components/MatchesPanel').then((module
 type View = 'players' | 'matches' | 'technical';
 
 type RosterCache = { players: Player[]; session: TrainingSession; savedAt: number };
+type MatchesCache = { matches: MatchRecord[]; savedAt: number };
 const rosterCacheKey = (auth: AuthSession) => `zabal-roster-v1-${auth.role}-${auth.playerId || 'staff'}`;
+const matchesCacheKey = (auth: AuthSession) => `zabal-matches-v1-${auth.role}-${auth.playerId || 'staff'}`;
 const readRosterCache = (auth: AuthSession): RosterCache | null => {
   try {
     const cached = JSON.parse(localStorage.getItem(rosterCacheKey(auth)) || 'null') as RosterCache | null;
@@ -28,6 +30,15 @@ const readRosterCache = (auth: AuthSession): RosterCache | null => {
 };
 const saveRosterCache = (auth: AuthSession, players: Player[], session: TrainingSession) => {
   try { localStorage.setItem(rosterCacheKey(auth), JSON.stringify({ players, session, savedAt: Date.now() })); } catch { /* La app sigue operativa sin caché. */ }
+};
+const readMatchesCache = (auth: AuthSession): MatchesCache | null => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(matchesCacheKey(auth)) || 'null') as MatchesCache | null;
+    return Array.isArray(cached?.matches) ? cached : null;
+  } catch { return null; }
+};
+const saveMatchesCache = (auth: AuthSession, matches: MatchRecord[]) => {
+  try { localStorage.setItem(matchesCacheKey(auth), JSON.stringify({ matches, savedAt: Date.now() })); } catch { /* La app sigue operativa sin caché. */ }
 };
 
 export default function App() {
@@ -117,17 +128,24 @@ export default function App() {
       }
       if (cached) {
         setHydratedToken(auth.token);
-        setError('Google está tardando en responder. Se muestra la última plantilla guardada y puedes volver a intentarlo recargando.');
+        setToast('Mostrando la última plantilla guardada mientras Google se recupera');
       } else setError(cause.message || 'No se pudieron cargar los datos.');
     }).finally(() => setLoading(false));
   }, [auth?.token, hydratedToken]);
 
   useEffect(() => {
     if (!auth || matchesLoaded || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
-    setLoading(true);
+    const cached = readMatchesCache(auth);
+    if (cached) {
+      setMatches(cached.matches);
+      setMatchesLoaded(true);
+    } else setLoading(true);
     dataService.getMatches(auth.token)
-      .then((nextMatches) => { setMatches(nextMatches); setMatchesLoaded(true); })
-      .catch((cause: Error) => setError(cause.message || 'No se pudieron cargar los partidos.'))
+      .then((nextMatches) => { setMatches(nextMatches); setMatchesLoaded(true); saveMatchesCache(auth, nextMatches); })
+      .catch((cause: Error) => {
+        if (cached) setToast('Partidos disponibles sin conexión; se actualizarán al recuperar Google');
+        else setError(cause.message || 'No se pudieron cargar los partidos.');
+      })
       .finally(() => setLoading(false));
   }, [auth?.token, auth?.role, view, matchesLoaded]);
 
@@ -195,7 +213,7 @@ export default function App() {
     setError('');
     try {
       const saved = await dataService.saveMatch(auth.token, { ...input, requestId: input.requestId || crypto.randomUUID() });
-      setMatches((current) => [saved, ...current]);
+      setMatches((current) => { const next = [saved, ...current]; saveMatchesCache(auth, next); return next; });
       setToast('Partido, minutos y tarjetas guardados');
       return true;
     } catch (cause) {
@@ -211,7 +229,7 @@ export default function App() {
     setSaving(true); setError('');
     try {
       const updated = await dataService.updateMatch(auth.token, matchId, input);
-      setMatches((current) => current.map((match) => match.id === matchId ? updated : match));
+      setMatches((current) => { const next = current.map((match) => match.id === matchId ? updated : match); saveMatchesCache(auth, next); return next; });
       setToast('Partido actualizado');
       return true;
     } catch (cause) {
@@ -225,7 +243,7 @@ export default function App() {
     setSaving(true); setError('');
     try {
       await dataService.deleteMatch(auth.token, matchId);
-      setMatches((current) => current.filter((match) => match.id !== matchId));
+      setMatches((current) => { const next = current.filter((match) => match.id !== matchId); saveMatchesCache(auth, next); return next; });
       setToast('Partido eliminado');
       return true;
     } catch (cause) {
