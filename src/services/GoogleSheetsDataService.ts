@@ -12,8 +12,10 @@ export class GoogleSheetsDataService implements DataService {
     let response: Response | undefined;
     let serviceReached = false;
     const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'setPlayerInjury'].includes(action);
-    const maxAttempts = isWrite ? 3 : 2;
-    const timeoutMs = isWrite ? 12000 : 8000;
+    const maxAttempts = 2;
+    // Apps Script puede necesitar algo más de margen al despertar y escribir
+    // un acta completa, especialmente desde conexiones móviles.
+    const timeoutMs = isWrite ? 20000 : 8000;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), timeoutMs);

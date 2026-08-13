@@ -416,8 +416,21 @@ function updateMatch_(matchId, input, session) {
 
 function deleteRowsByMatchId_(targetSheet, matchId) {
   const values = targetSheet.getDataRange().getValues();
-  for (let index = values.length - 1; index >= 1; index -= 1) {
-    if (String(values[index][0]) === String(matchId)) targetSheet.deleteRow(index + 1);
+  const rowNumbers = [];
+  for (let index = 1; index < values.length; index += 1) {
+    if (String(values[index][0]) === String(matchId)) rowNumbers.push(index + 1);
+  }
+  if (!rowNumbers.length) return;
+  const groups = [];
+  let start = rowNumbers[0];
+  let count = 1;
+  for (let index = 1; index < rowNumbers.length; index += 1) {
+    if (rowNumbers[index] === rowNumbers[index - 1] + 1) count += 1;
+    else { groups.push({ start: start, count: count }); start = rowNumbers[index]; count = 1; }
+  }
+  groups.push({ start: start, count: count });
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    targetSheet.deleteRows(groups[index].start, groups[index].count);
   }
 }
 
