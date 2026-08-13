@@ -335,7 +335,7 @@ tbody tr:hover { background: #f8fafc; }
 .match-minutes-heading p:last-child { margin: 5px 0 0; color: var(--muted); font-size: .82rem; }
 .duration-badge { min-height: 36px; padding: 0 11px; border-radius: 18px; display: inline-flex; align-items: center; gap: 6px; color: #245f95; background: #e3eff9; font-size: .78rem; font-weight: 800; white-space: nowrap; }
 .match-player-list { display: grid; grid-template-columns: 1fr; }
-.match-player-row { min-height: 62px; padding: 8px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 38px minmax(150px, 1fr) 72px 92px 58px 54px 54px; align-items: center; gap: 8px; }
+.match-player-row { min-height: 62px; padding: 8px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 38px minmax(150px, 1fr) 68px 68px 88px 56px 52px 52px; align-items: center; gap: 7px; }
 .match-player-number { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #245f95; background: #e5f0fa; font-family: 'Manrope'; font-size: .78rem; font-weight: 800; }
 .match-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--navy); font-weight: 800; white-space: nowrap; }
 .match-stat-input { position: relative; display: block; }
@@ -348,6 +348,12 @@ tbody tr:hover { background: #f8fafc; }
 .match-called-up > svg { width: 29px; height: 29px; padding: 6px; border: 1px solid #cbd6e1; border-radius: 8px; color: transparent; background: #fff; }
 .match-called-up.active > svg { border-color: #19845e; color: #fff; background: #19845e; }
 .match-called-up small { font-size: .66rem; }
+.match-starter { display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-weight: 800; cursor: pointer; }
+.match-starter input { position: absolute; opacity: 0; }
+.match-starter > svg { width: 29px; height: 29px; padding: 6px; border: 1px solid #cbd6e1; border-radius: 8px; color: transparent; background: #fff; }
+.match-starter.active > svg { border-color: #b88c00; color: var(--navy); background: var(--yellow); }
+.match-starter:has(input:disabled) { opacity: .42; cursor: not-allowed; }
+.match-starter small { font-size: .66rem; }
 .match-goal-input { display: flex; align-items: center; gap: 5px; color: #3474a8; }
 .match-goal-input input { width: 35px; height: 40px; padding: 0; border: 1px solid #cbd6e1; border-radius: 8px; color: var(--navy); text-align: center; background: #fff; font-weight: 800; }
 .discipline-warning-row { background: #fff0f2; box-shadow: inset 4px 0 #c93443; }
@@ -376,6 +382,33 @@ tbody tr:hover { background: #f8fafc; }
 .match-type-icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; }
 .match-type-icon--official { color: #7b5b00; background: #fff0bc; }
 .match-type-icon--friendly { color: #245f95; background: #e3eff9; }
+.match-rankings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; }
+.ranking-card { padding: 0; overflow: hidden; }
+.ranking-card--scorers { border-top: 4px solid var(--yellow); }
+.ranking-heading { padding: 20px 22px 14px; display: flex; align-items: center; gap: 12px; }
+.ranking-heading > span { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #276ca5; background: #e3eff9; }
+.ranking-heading > span svg { width: 21px; }
+.ranking-heading h2 { margin-top: 2px; color: var(--navy); font-size: 1.12rem; }
+.ranking-list { margin: 0; padding: 0 22px 18px; list-style: none; }
+.ranking-list li { min-height: 54px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.ranking-position { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #526174; background: #edf1f5; font-size: .72rem; font-weight: 900; }
+.podium-1 .ranking-position { color: #684f00; background: #f6ca3b; }
+.podium-2 .ranking-position { color: #43505e; background: #dbe1e7; }
+.podium-3 .ranking-position { color: #71451c; background: #e8bd92; }
+.ranking-player { min-width: 0; display: flex; flex-direction: column; }
+.ranking-player strong { overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
+.ranking-player small { margin-top: 2px; color: var(--muted); font-size: .68rem; }
+.ranking-value { color: var(--navy); font-variant-numeric: tabular-nums; }
+.ranking-value small { color: var(--muted); font-size: .68rem; }
+.ranking-empty { min-height: 125px; padding: 20px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #8a98a8; text-align: center; }
+.discipline-ranking { grid-column: 1 / -1; border-top: 4px solid #c93443; }
+.discipline-ranking .ranking-heading > span { color: #ae2e3b; background: #fff0f2; }
+.discipline-ranking-list { padding: 0 22px 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.discipline-ranking-list > div { padding: 13px 14px; border: 1px solid #f2c9cf; border-radius: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; background: #fff7f8; }
+.discipline-ranking-list strong { min-width: 150px; margin-right: auto; color: var(--navy); }
+.discipline-ranking-list span { display: inline-flex; align-items: center; gap: 5px; color: #58697c; font-weight: 800; }
+.discipline-ranking-list .card-mark { display: inline-block; }
+.discipline-ranking-list small { flex-basis: 100%; color: #ae2e3b; font-weight: 800; }
 
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 300; min-width: 330px; padding: 15px 17px; border-radius: 12px; display: flex; align-items: center; gap: 10px; color: #fff; background: #176f52; box-shadow: 0 15px 35px rgba(11, 45, 34, .25); animation: toast-in .2s ease-out; }
 .toast span { margin-right: auto; font-weight: 700; }
@@ -413,6 +446,8 @@ tbody tr:hover { background: #f8fafc; }
   .evolution-stats, .privacy-note { grid-column: 1 / -1; }
   .technical-split { grid-template-columns: 1fr; }
   .matches-history-grid { grid-template-columns: 1fr; }
+  .match-rankings { grid-template-columns: 1fr; }
+  .discipline-ranking { grid-column: auto; }
   .filter-topline { grid-template-columns: 1fr 1fr; }
   .filter-topline .text-button { grid-column: auto; }
 }
@@ -465,7 +500,7 @@ tbody tr:hover { background: #f8fafc; }
   .matches-switch { width: 100%; }
   .matches-switch button { flex: 1; justify-content: center; padding: 0 10px; }
   .match-player-list { grid-template-columns: 1fr; }
-  .match-player-row { grid-template-columns: 34px minmax(0, 1fr) 64px 76px 50px 46px 46px; gap: 5px; }
+  .match-player-row { grid-template-columns: 34px minmax(0, 1fr) 60px 60px 70px 46px 43px 43px; gap: 4px; }
   .match-card-input { gap: 3px; }
   .match-card-input input { width: 30px; }
   .match-goal-input { gap: 3px; }
@@ -473,6 +508,7 @@ tbody tr:hover { background: #f8fafc; }
   .discipline-profile-alert em { width: 100%; margin-left: 0; }
   .discipline-alert-row { grid-template-columns: minmax(0, 1fr) auto auto; }
   .discipline-alert-row em { grid-column: 1 / -1; }
+  .discipline-ranking-list { grid-template-columns: 1fr; }
   .toast { right: 14px; bottom: 14px; left: 14px; min-width: 0; }
 }
 
@@ -483,10 +519,11 @@ tbody tr:hover { background: #f8fafc; }
   .recent-match-actions { grid-column: 2 / -1; justify-self: end; }
   .injury-form-control { grid-template-columns: 38px minmax(0, 1fr); }
   .injury-form-control .switch-control { grid-column: 1 / -1; justify-self: end; }
-  .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 50px 44px 44px; grid-template-areas: 'number name name called minutes' '. . goals yellow red'; row-gap: 7px; }
+  .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 44px 44px 44px 44px; grid-template-areas: 'number name name called starter minutes' '. . goals yellow red .'; row-gap: 7px; }
   .match-player-number { grid-area: number; }
   .match-player-name { grid-area: name; }
   .match-called-up { grid-area: called; }
+  .match-starter { grid-area: starter; }
   .match-stat-input { grid-area: minutes; }
   .match-goal-input { grid-area: goals; justify-self: end; }
   .match-player-row .match-card-input:nth-last-child(2) { grid-area: yellow; }

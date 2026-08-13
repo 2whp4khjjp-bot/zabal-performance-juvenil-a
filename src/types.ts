@@ -52,6 +52,7 @@ export type AppConfig = {
   };
   colors: { navy: string; yellow: string };
   logoSrc: string;
+  maxStarters: number;
 };
 
 export type AuthSession = {
@@ -94,6 +95,7 @@ export type MatchMinutes = {
   playerId: string;
   playerName: string;
   calledUp?: boolean;
+  starter?: boolean;
   minutes: number;
   goals?: number;
   yellowCards?: number;

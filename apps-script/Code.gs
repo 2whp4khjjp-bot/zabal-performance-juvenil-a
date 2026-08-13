@@ -11,6 +11,7 @@ const SHEETS = {
   MATCHES: 'Partidos',
   MATCH_MINUTES: 'Minutos partidos',
 };
+const MAX_STARTERS = 11; // Cambiar a 7 al desplegar una categoría de fútbol 7.
 
 const HEADERS = {
   Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash', 'baja_lesion'],
@@ -19,7 +20,7 @@ const HEADERS = {
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
-  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles'],
+  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular'],
 };
 
 function onOpen() {
@@ -234,6 +235,7 @@ function getBootstrap_(session) {
 }
 
 function getMatches_(session) {
+  ensureMatchMinutesSchema_();
   const minutesByMatch = {};
   rows_(SHEETS.MATCH_MINUTES).forEach(function(row) {
     const matchId = String(row.partido_id || '');
@@ -242,6 +244,7 @@ function getMatches_(session) {
       playerId: String(row.jugador_id),
       playerName: String(row.jugador_nombre),
       calledUp: hasValue_(row.convocado) ? boolean_(row.convocado) : Number(row.minutos || 0) > 0 || Number(row.amarillas || 0) > 0 || Number(row.rojas || 0) > 0,
+      starter: boolean_(row.titular),
       minutes: Number(row.minutos || 0),
       goals: Number(row.goles || 0),
       yellowCards: Number(row.amarillas || 0),
@@ -287,6 +290,7 @@ function validateMatchInput_(input, session) {
     const playerId = String(entry.playerId || '');
     const player = playersById[playerId];
     const calledUp = Boolean(entry.calledUp);
+    const starter = Boolean(entry.starter);
     const minutes = Number(entry.minutes);
     const goals = Number(entry.goals || 0);
     const yellowCards = Number(entry.yellowCards || 0);
@@ -296,11 +300,12 @@ function validateMatchInput_(input, session) {
     if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw apiError_('Los goles de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw apiError_('Las amarillas de ' + player.name + ' no son válidas.', 'VALIDATION');
     if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw apiError_('Las rojas de ' + player.name + ' no son válidas.', 'VALIDATION');
-    if (!calledUp && (minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
+    if (!calledUp && (starter || minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
     seen[playerId] = true;
-    return { playerId: player.id, playerName: player.name, calledUp: calledUp, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
+    return { playerId: player.id, playerName: player.name, calledUp: calledUp, starter: starter, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
   });
   if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
+  if (cleanEntries.filter(function(entry) { return entry.starter; }).length > MAX_STARTERS) throw apiError_('No puedes marcar más de ' + MAX_STARTERS + ' titulares.', 'VALIDATION');
 
   return { date: date, type: type, opponent: opponent, duration: duration, entries: cleanEntries };
 }
@@ -318,8 +323,8 @@ function saveMatch_(input, session) {
     const id = requestedId || Utilities.getUuid();
     const now = new Date();
     sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
-    const minutesSheet = sheet_(SHEETS.MATCH_MINUTES);
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
+    const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
       id: id, date: clean.date, type: clean.type, opponent: clean.opponent, durationMinutes: clean.duration,
@@ -356,8 +361,8 @@ function updateMatch_(matchId, input, session) {
       return '';
     })]);
     deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
-    const minutesSheet = sheet_(SHEETS.MATCH_MINUTES);
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
+    const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return getMatches_({ role: 'staff' }).find(function(match) { return match.id === id; });
   } finally { lock.releaseLock(); }
@@ -368,6 +373,13 @@ function deleteRowsByMatchId_(targetSheet, matchId) {
   for (let index = values.length - 1; index >= 1; index -= 1) {
     if (String(values[index][0]) === String(matchId)) targetSheet.deleteRow(index + 1);
   }
+}
+
+function ensureMatchMinutesSchema_() {
+  const targetSheet = sheet_(SHEETS.MATCH_MINUTES);
+  const headers = targetSheet.getRange(1, 1, 1, Math.max(1, targetSheet.getLastColumn())).getValues()[0].map(String);
+  if (headers.indexOf('titular') < 0) targetSheet.getRange(1, headers.length + 1).setValue('titular');
+  return targetSheet;
 }
 
 function deleteMatch_(matchId, session) {

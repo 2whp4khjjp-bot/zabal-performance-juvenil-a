@@ -158,16 +158,18 @@ export class LocalDataService implements DataService {
       }
       seen.add(entry.playerId);
       const calledUp = Boolean(entry.calledUp);
+      const starter = Boolean(entry.starter);
       const goals = entry.goals ?? 0;
       const yellowCards = entry.yellowCards ?? 0;
       const redCards = entry.redCards ?? 0;
       if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Revisa los goles de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
-      if (!calledUp && (entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
-      return { playerId: player.id, playerName: player.name, calledUp, minutes: entry.minutes, goals, yellowCards, redCards };
+      if (!calledUp && (starter || entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
+      return { playerId: player.id, playerName: player.name, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards };
     });
     if (!minutes.some((entry) => entry.calledUp)) throw new DataServiceError('Marca como convocado al menos a un jugador.', 'VALIDATION');
+    if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
     const now = new Date().toISOString();
     const match: MatchRecord = {
       id: crypto.randomUUID(), date: input.date, type: input.type, opponent,
