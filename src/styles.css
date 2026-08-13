@@ -363,11 +363,15 @@ tbody tr:hover { background: #f8fafc; }
 .match-totals-card .panel-card__heading { margin: 0; padding: 20px 22px 14px; }
 .match-totals-card th { padding: 12px 13px; font-size: .74rem; font-weight: 800; }
 .recent-match-list { display: grid; }
-.recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 11px; }
 .recent-match-row:first-child { border-top: 0; }
 .recent-match-row > div { min-width: 0; display: flex; flex-direction: column; }
 .recent-match-row > div strong { overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
 .recent-match-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
+.recent-match-actions { display: flex; gap: 5px; }
+.recent-match-actions button { width: 34px; height: 34px; border: 1px solid #cfd9e4; border-radius: 8px; display: grid; place-items: center; color: #286da8; background: #fff; }
+.recent-match-actions button.danger { color: #a92e3a; }
+.recent-match-actions button:disabled { opacity: .5; }
 .recent-match-row > span:last-child { display: flex; flex-direction: column; align-items: flex-end; color: var(--navy); }
 .match-type-icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; }
 .match-type-icon--official { color: #7b5b00; background: #fff0bc; }
@@ -475,6 +479,8 @@ tbody tr:hover { background: #f8fafc; }
 @media (max-width: 430px) {
   .page-shell { padding-right: 14px; padding-left: 14px; }
   .player-grid { grid-template-columns: 1fr; }
+  .recent-match-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
+  .recent-match-actions { grid-column: 2 / -1; justify-self: end; }
   .injury-form-control { grid-template-columns: 38px minmax(0, 1fr); }
   .injury-form-control .switch-control { grid-column: 1 / -1; justify-self: end; }
   .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 50px 44px 44px; grid-template-areas: 'number name name called minutes' '. . goals yellow red'; row-gap: 7px; }

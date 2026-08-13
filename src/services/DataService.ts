@@ -10,6 +10,8 @@ export interface DataService {
   saveMeasurement(token: string, input: MeasurementInput): Promise<Measurement>;
   getMatches(token: string): Promise<MatchRecord[]>;
   saveMatch(token: string, input: MatchInput): Promise<MatchRecord>;
+  updateMatch(token: string, matchId: string, input: MatchInput): Promise<MatchRecord>;
+  deleteMatch(token: string, matchId: string): Promise<boolean>;
   setPlayerInjury(token: string, playerId: string, injured: boolean): Promise<Player>;
 }
 

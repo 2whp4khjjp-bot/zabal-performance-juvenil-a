@@ -194,7 +194,7 @@ export default function App() {
     setSaving(true);
     setError('');
     try {
-      const saved = await dataService.saveMatch(auth.token, input);
+      const saved = await dataService.saveMatch(auth.token, { ...input, requestId: input.requestId || crypto.randomUUID() });
       setMatches((current) => [saved, ...current]);
       setToast('Partido, minutos y tarjetas guardados');
       return true;
@@ -204,6 +204,34 @@ export default function App() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateMatch = async (matchId: string, input: MatchInput) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      const updated = await dataService.updateMatch(auth.token, matchId, input);
+      setMatches((current) => current.map((match) => match.id === matchId ? updated : match));
+      setToast('Partido actualizado');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo actualizar el partido.');
+      return false;
+    } finally { setSaving(false); }
+  };
+
+  const deleteMatch = async (matchId: string) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      await dataService.deleteMatch(auth.token, matchId);
+      setMatches((current) => current.filter((match) => match.id !== matchId));
+      setToast('Partido eliminado');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo eliminar el partido.');
+      return false;
+    } finally { setSaving(false); }
   };
 
   const setPlayerInjury = async (playerId: string, injured: boolean) => {
@@ -237,7 +265,7 @@ export default function App() {
       {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onInjuryChange={setPlayerInjury} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
-        {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} />}
+        {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} onDelete={deleteMatch} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}

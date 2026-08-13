@@ -119,6 +119,7 @@ export type MatchRecord = {
 };
 
 export type MatchInput = {
+  requestId?: string;
   date: string;
   type: MatchType;
   opponent: string;

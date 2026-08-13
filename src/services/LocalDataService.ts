@@ -174,9 +174,34 @@ export class LocalDataService implements DataService {
       durationMinutes: input.durationMinutes, minutes, createdAt: now, updatedAt: now, createdBy: 'cuerpo-tecnico',
     };
     const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const duplicate = input.requestId && matches.find((item) => item.id === input.requestId);
+    if (duplicate) return duplicate;
+    if (input.requestId) match.id = input.requestId;
     matches.push(match);
     localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
     return match;
+  }
+
+  async updateMatch(token: string, matchId: string, input: MatchInput): Promise<MatchRecord> {
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const index = matches.findIndex((item) => item.id === matchId);
+    if (index < 0) throw new DataServiceError('Partido no encontrado.', 'NOT_FOUND');
+    const temporary = await this.saveMatch(token, { ...input, requestId: crypto.randomUUID() });
+    const refreshed = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const updated = { ...temporary, id: matchId, createdAt: matches[index].createdAt, updatedAt: new Date().toISOString() };
+    const next = refreshed.filter((item) => item.id !== temporary.id).map((item) => item.id === matchId ? updated : item);
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(next));
+    return updated;
+  }
+
+  async deleteMatch(token: string, matchId: string): Promise<boolean> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede eliminar partidos.', 'FORBIDDEN');
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    const next = matches.filter((item) => item.id !== matchId);
+    if (next.length === matches.length) throw new DataServiceError('Partido no encontrado.', 'NOT_FOUND');
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(next));
+    return true;
   }
 
   async setPlayerInjury(token: string, playerId: string, injured: boolean): Promise<Player> {

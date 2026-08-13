@@ -89,6 +89,14 @@ export class GoogleSheetsDataService implements DataService {
     return this.request<MatchRecord>('saveMatch', { token, match: input });
   }
 
+  updateMatch(token: string, matchId: string, input: MatchInput) {
+    return this.request<MatchRecord>('updateMatch', { token, matchId, match: input });
+  }
+
+  deleteMatch(token: string, matchId: string) {
+    return this.request<boolean>('deleteMatch', { token, matchId });
+  }
+
   setPlayerInjury(token: string, playerId: string, injured: boolean) {
     return this.request<Player>('setPlayerInjury', { token, playerId, injured });
   }

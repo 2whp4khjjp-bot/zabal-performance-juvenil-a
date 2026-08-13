@@ -80,6 +80,8 @@ function doPost(event) {
     if (action === 'saveMeasurement') return json_({ ok: true, data: saveMeasurement_(input.measurement, session) });
     if (action === 'getMatches') return json_({ ok: true, data: getMatches_(session) });
     if (action === 'saveMatch') return json_({ ok: true, data: saveMatch_(input.match, session) });
+    if (action === 'updateMatch') return json_({ ok: true, data: updateMatch_(input.matchId, input.match, session) });
+    if (action === 'deleteMatch') return json_({ ok: true, data: deleteMatch_(input.matchId, session) });
     if (action === 'setPlayerInjury') return json_({ ok: true, data: setPlayerInjury_(input.playerId, input.injured, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
@@ -263,7 +265,7 @@ function getMatches_(session) {
   });
 }
 
-function saveMatch_(input, session) {
+function validateMatchInput_(input, session) {
   requireStaff_(session);
   if (!input) throw apiError_('Faltan los datos del partido.', 'VALIDATION');
   const date = String(input.date || '').trim();
@@ -300,22 +302,88 @@ function saveMatch_(input, session) {
   });
   if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
 
+  return { date: date, type: type, opponent: opponent, duration: duration, entries: cleanEntries };
+}
+
+function saveMatch_(input, session) {
+  const clean = validateMatchInput_(input, session);
+  const requestedId = String(input.requestId || '').trim();
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
   try {
-    const id = Utilities.getUuid();
+    if (requestedId) {
+      const existing = getMatches_({ role: 'staff' }).find(function(match) { return match.id === requestedId; });
+      if (existing) return existing;
+    }
+    const id = requestedId || Utilities.getUuid();
     const now = new Date();
-    sheet_(SHEETS.MATCHES).appendRow([id, date, type, opponent, duration, now, now, 'cuerpo-tecnico']);
-    const minuteRows = cleanEntries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
+    sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
     const minutesSheet = sheet_(SHEETS.MATCH_MINUTES);
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
-      id: id, date: date, type: type, opponent: opponent, durationMinutes: duration,
-      minutes: cleanEntries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
+      id: id, date: clean.date, type: clean.type, opponent: clean.opponent, durationMinutes: clean.duration,
+      minutes: clean.entries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
     };
   } finally {
     lock.releaseLock();
   }
+}
+
+function updateMatch_(matchId, input, session) {
+  const clean = validateMatchInput_(input, session);
+  const id = String(matchId || '');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const matchesSheet = sheet_(SHEETS.MATCHES);
+    const matchValues = matchesSheet.getDataRange().getValues();
+    const matchHeaders = matchValues[0].map(String);
+    const idColumn = matchHeaders.indexOf('id');
+    const rowIndex = matchValues.slice(1).findIndex(function(row) { return String(row[idColumn]) === id; });
+    if (rowIndex < 0) throw apiError_('Partido no encontrado.', 'NOT_FOUND');
+    const rowNumber = rowIndex + 2;
+    const createdAt = matchValues[rowIndex + 1][matchHeaders.indexOf('creado_en')];
+    matchesSheet.getRange(rowNumber, 1, 1, matchHeaders.length).setValues([matchHeaders.map(function(header) {
+      if (header === 'id') return id;
+      if (header === 'fecha') return clean.date;
+      if (header === 'tipo') return clean.type;
+      if (header === 'rival') return clean.opponent;
+      if (header === 'duracion_minutos') return clean.duration;
+      if (header === 'creado_en') return createdAt;
+      if (header === 'actualizado_en') return new Date();
+      if (header === 'creado_por') return 'cuerpo-tecnico';
+      return '';
+    })]);
+    deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals]; });
+    const minutesSheet = sheet_(SHEETS.MATCH_MINUTES);
+    minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
+    return getMatches_({ role: 'staff' }).find(function(match) { return match.id === id; });
+  } finally { lock.releaseLock(); }
+}
+
+function deleteRowsByMatchId_(targetSheet, matchId) {
+  const values = targetSheet.getDataRange().getValues();
+  for (let index = values.length - 1; index >= 1; index -= 1) {
+    if (String(values[index][0]) === String(matchId)) targetSheet.deleteRow(index + 1);
+  }
+}
+
+function deleteMatch_(matchId, session) {
+  requireStaff_(session);
+  const id = String(matchId || '');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const matchesSheet = sheet_(SHEETS.MATCHES);
+    const values = matchesSheet.getDataRange().getValues();
+    const rowIndex = values.slice(1).findIndex(function(row) { return String(row[0]) === id; });
+    if (rowIndex < 0) throw apiError_('Partido no encontrado.', 'NOT_FOUND');
+    matchesSheet.deleteRow(rowIndex + 2);
+    deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
+    return true;
+  } finally { lock.releaseLock(); }
 }
 
 function getCurrentSession_() {
