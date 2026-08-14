@@ -1,4 +1,4 @@
-import type { AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 
 export interface DataService {
   authenticate(pin: string, role: AuthRole): Promise<LoginResult>;
@@ -12,6 +12,8 @@ export interface DataService {
   saveMatch(token: string, input: MatchInput): Promise<MatchRecord>;
   updateMatch(token: string, matchId: string, input: MatchInput): Promise<MatchRecord>;
   deleteMatch(token: string, matchId: string): Promise<boolean>;
+  getAttendance(token: string): Promise<AttendanceRecord[]>;
+  saveAttendance(token: string, input: AttendanceInput): Promise<AttendanceRecord[]>;
   setPlayerInjury(token: string, playerId: string, injury: InjuryInput): Promise<Player>;
 }
 

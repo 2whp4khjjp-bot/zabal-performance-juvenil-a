@@ -11,6 +11,7 @@ const SHEETS = {
   MATCHES: 'Partidos',
   MATCH_MINUTES: 'Minutos partidos',
   INJURIES: 'Bajas',
+  ATTENDANCE: 'Asistencia',
 };
 const MAX_STARTERS = 11; // Cambiar a 7 al desplegar una categoría de fútbol 7.
 
@@ -23,6 +24,7 @@ const HEADERS = {
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
   'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular'],
   Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'creado_en', 'actualizado_en'],
+  Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'minutos_retraso', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
 
 function onOpen() {
@@ -66,7 +68,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 3 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 4 } });
 }
 
 function doPost(event) {
@@ -85,6 +87,8 @@ function doPost(event) {
     if (action === 'saveMatch') return json_({ ok: true, data: saveMatch_(input.match, session) });
     if (action === 'updateMatch') return json_({ ok: true, data: updateMatch_(input.matchId, input.match, session) });
     if (action === 'deleteMatch') return json_({ ok: true, data: deleteMatch_(input.matchId, session) });
+    if (action === 'getAttendance') return json_({ ok: true, data: getAttendance_(session) });
+    if (action === 'saveAttendance') return json_({ ok: true, data: saveAttendance_(input.attendance, session) });
     if (action === 'setPlayerInjury') return json_({ ok: true, data: setPlayerInjury_(input.playerId, input.injury || { injured: input.injured }, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
@@ -182,7 +186,7 @@ function requireSession_(token) {
 }
 
 function requireStaff_(session) {
-  if (!session || session.role !== 'staff') throw apiError_('Solo el cuerpo técnico puede acceder a los partidos.', 'FORBIDDEN');
+  if (!session || session.role !== 'staff') throw apiError_('Solo el cuerpo técnico puede acceder a este apartado.', 'FORBIDDEN');
 }
 
 function getPlayers_(session) {
@@ -268,6 +272,78 @@ function getMeasurements_(session) {
       createdBy: String(row.creado_por || ''), updatedAt: iso_(row.actualizado_en),
     };
   });
+}
+
+function ensureAttendanceSheet_() {
+  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) throw apiError_('La hoja de cálculo no está configurada.', 'CONFIG');
+  const spreadsheet = SpreadsheetApp.openById(id);
+  const existing = spreadsheet.getSheetByName(SHEETS.ATTENDANCE);
+  if (existing) return existing;
+  ensureSheet_(spreadsheet, SHEETS.ATTENDANCE, HEADERS.Asistencia);
+  return spreadsheet.getSheetByName(SHEETS.ATTENDANCE);
+}
+
+function getAttendance_(session) {
+  requireStaff_(session);
+  ensureAttendanceSheet_();
+  return rows_(SHEETS.ATTENDANCE).map(function(row) {
+    return {
+      id: String(row.id), date: dateKey_(row.fecha), playerId: String(row.jugador_id), playerName: String(row.jugador_nombre),
+      status: String(row.estado || 'pending'), lateMinutes: Number(row.minutos_retraso || 0), comments: String(row.comentarios || ''),
+      createdAt: iso_(row.creado_en), updatedAt: iso_(row.actualizado_en), createdBy: String(row.creado_por || 'cuerpo-tecnico'),
+    };
+  }).sort(function(a, b) { return (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt); });
+}
+
+function saveAttendance_(input, session) {
+  requireStaff_(session);
+  if (!input) throw apiError_('Faltan los datos de asistencia.', 'VALIDATION');
+  const date = String(input.date || '');
+  const entries = Array.isArray(input.entries) ? input.entries : [];
+  const today = dateKey_(new Date());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw apiError_('La fecha de asistencia no es válida.', 'VALIDATION');
+  if (!entries.length) throw apiError_('No hay jugadores para guardar.', 'VALIDATION');
+  const allowedStatuses = { pending: true, present: true, late: true, justified: true, unjustified: true, individual: true, medical: true };
+  const players = getPlayers_({ role: 'staff' }).filter(function(player) { return !player.staffMember; });
+  const playersById = {};
+  players.forEach(function(player) { playersById[player.id] = player; });
+  const seen = {};
+  const cleanEntries = entries.map(function(entry) {
+    const playerId = String(entry.playerId || '');
+    const player = playersById[playerId];
+    const status = String(entry.status || 'pending');
+    const lateMinutes = status === 'late' ? Number(entry.lateMinutes) : 0;
+    if (!player || player.name !== String(entry.playerName || '') || seen[playerId]) throw apiError_('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
+    if (!allowedStatuses[status]) throw apiError_('Revisa la asistencia de ' + player.name + '.', 'VALIDATION');
+    if (status === 'late' && (!Number.isInteger(lateMinutes) || lateMinutes < 1 || lateMinutes > 180)) throw apiError_('Revisa los minutos de retraso de ' + player.name + '.', 'VALIDATION');
+    seen[playerId] = true;
+    return { playerId: player.id, playerName: player.name, status: status, lateMinutes: lateMinutes, comments: String(entry.comments || '').replace(/[<>]/g, '').trim().slice(0, 250) };
+  });
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const attendanceSheet = ensureAttendanceSheet_();
+    const values = attendanceSheet.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const previousByPlayer = {};
+    const dateColumn = headers.indexOf('fecha');
+    const playerColumn = headers.indexOf('jugador_id');
+    values.slice(1).forEach(function(row) {
+      if (row[dateColumn] && dateKey_(row[dateColumn]) === date) previousByPlayer[String(row[playerColumn])] = { id: String(row[headers.indexOf('id')]), createdAt: row[headers.indexOf('creado_en')] };
+    });
+    const rowNumbers = [];
+    for (let index = 1; index < values.length; index += 1) if (values[index][dateColumn] && dateKey_(values[index][dateColumn]) === date) rowNumbers.push(index + 1);
+    for (let index = rowNumbers.length - 1; index >= 0; index -= 1) attendanceSheet.deleteRow(rowNumbers[index]);
+    const now = new Date();
+    const rows = cleanEntries.map(function(entry) {
+      const previous = previousByPlayer[entry.playerId];
+      return [previous ? previous.id : Utilities.getUuid(), date, entry.playerId, entry.playerName, entry.status, entry.lateMinutes, entry.comments, previous ? previous.createdAt : now, now, 'cuerpo-tecnico'];
+    });
+    attendanceSheet.getRange(attendanceSheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    return rows.map(function(row) { return { id: String(row[0]), date: date, playerId: String(row[2]), playerName: String(row[3]), status: String(row[4]), lateMinutes: Number(row[5] || 0), comments: String(row[6] || ''), createdAt: iso_(row[7]), updatedAt: iso_(row[8]), createdBy: String(row[9]) }; });
+  } finally { lock.releaseLock(); }
 }
 
 function getBootstrap_(session) {

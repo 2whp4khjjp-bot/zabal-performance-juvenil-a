@@ -1,4 +1,4 @@
-import type { AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -11,7 +11,7 @@ export class GoogleSheetsDataService implements DataService {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');
     let response: Response | undefined;
     let serviceReached = false;
-    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'setPlayerInjury'].includes(action);
+    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'saveAttendance', 'setPlayerInjury'].includes(action);
     const maxAttempts = 2;
     // Apps Script puede necesitar algo más de margen al despertar y escribir
     // un acta completa, especialmente desde conexiones móviles.
@@ -100,6 +100,14 @@ export class GoogleSheetsDataService implements DataService {
 
   deleteMatch(token: string, matchId: string) {
     return this.request<boolean>('deleteMatch', { token, matchId });
+  }
+
+  getAttendance(token: string) {
+    return this.request<AttendanceRecord[]>('getAttendance', { token });
+  }
+
+  saveAttendance(token: string, input: AttendanceInput) {
+    return this.request<AttendanceRecord[]>('saveAttendance', { token, attendance: input });
   }
 
   setPlayerInjury(token: string, playerId: string, injury: InjuryInput) {

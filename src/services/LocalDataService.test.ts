@@ -60,4 +60,19 @@ describe('servicio local', () => {
     await expect(service.deleteMatch(staff.token, first.id)).resolves.toBe(true);
     expect((await service.getMatches(staff.token)).some((match) => match.id === first.id)).toBe(false);
   });
+
+  it('guarda una asistencia diaria y acumula minutos de retraso', async () => {
+    const service = new LocalDataService();
+    const { auth: staff } = await service.authenticate('2026', 'staff');
+    const players = await service.getPlayers(staff.token);
+    const date = new Date().toISOString().slice(0, 10);
+    const saved = await service.saveAttendance(staff.token, {
+      date,
+      entries: players.slice(0, 2).map((player, index) => ({
+        playerId: player.id, playerName: player.name, status: index === 0 ? 'late' : 'present', lateMinutes: index === 0 ? 12 : 0, comments: '',
+      })),
+    });
+    expect(saved[0]).toMatchObject({ status: 'late', lateMinutes: 12 });
+    expect(await service.getAttendance(staff.token)).toHaveLength(2);
+  });
 });

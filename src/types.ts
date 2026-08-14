@@ -77,6 +77,26 @@ export type AuthSession = {
 
 export type DashboardFilter = 'all' | 'pending' | 'registered';
 
+export type AttendanceStatus = 'pending' | 'present' | 'late' | 'justified' | 'unjustified' | 'individual' | 'medical';
+
+export type AttendanceRecord = {
+  id: string;
+  date: string;
+  playerId: string;
+  playerName: string;
+  status: AttendanceStatus;
+  lateMinutes: number;
+  comments: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type AttendanceInput = {
+  date: string;
+  entries: Array<Pick<AttendanceRecord, 'playerId' | 'playerName' | 'status' | 'lateMinutes' | 'comments'>>;
+};
+
 export type MeasurementInput = {
   date?: string;
   playerId: string;

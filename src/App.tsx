@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AuthRole, AuthSession, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -17,13 +17,16 @@ import './styles.css';
 
 const TechnicalPanel = lazy(() => import('./components/TechnicalPanel').then((module) => ({ default: module.TechnicalPanel })));
 const MatchesPanel = lazy(() => import('./components/MatchesPanel').then((module) => ({ default: module.MatchesPanel })));
+const AttendancePanel = lazy(() => import('./components/AttendancePanel').then((module) => ({ default: module.AttendancePanel })));
 
-type View = 'players' | 'matches' | 'technical';
+type View = 'players' | 'matches' | 'attendance' | 'technical';
 
 type RosterCache = { players: Player[]; session: TrainingSession; savedAt: number };
 type MatchesCache = { matches: MatchRecord[]; savedAt: number };
+type AttendanceCache = { attendance: AttendanceRecord[]; savedAt: number };
 const rosterCacheKey = (auth: AuthSession) => `zabal-roster-v1-${auth.role}-${auth.playerId || 'staff'}`;
 const matchesCacheKey = (auth: AuthSession) => `zabal-matches-v1-${auth.role}-${auth.playerId || 'staff'}`;
+const attendanceCacheKey = (auth: AuthSession) => `zabal-attendance-v1-${auth.role}-${auth.playerId || 'staff'}`;
 const readRosterCache = (auth: AuthSession): RosterCache | null => {
   try {
     const cached = JSON.parse(localStorage.getItem(rosterCacheKey(auth)) || 'null') as RosterCache | null;
@@ -42,6 +45,15 @@ const readMatchesCache = (auth: AuthSession): MatchesCache | null => {
 const saveMatchesCache = (auth: AuthSession, matches: MatchRecord[]) => {
   try { localStorage.setItem(matchesCacheKey(auth), JSON.stringify({ matches, savedAt: Date.now() })); } catch { /* La app sigue operativa sin caché. */ }
 };
+const readAttendanceCache = (auth: AuthSession): AttendanceCache | null => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(attendanceCacheKey(auth)) || 'null') as AttendanceCache | null;
+    return Array.isArray(cached?.attendance) ? cached : null;
+  } catch { return null; }
+};
+const saveAttendanceCache = (auth: AuthSession, attendance: AttendanceRecord[]) => {
+  try { localStorage.setItem(attendanceCacheKey(auth), JSON.stringify({ attendance, savedAt: Date.now() })); } catch { /* La app sigue operativa sin caché. */ }
+};
 
 export default function App() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readAuthSession());
@@ -51,6 +63,8 @@ export default function App() {
   const [trainingSession, setTrainingSession] = useState<TrainingSession | null>(null);
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [matchesLoaded, setMatchesLoaded] = useState(false);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [measurementDate, setMeasurementDate] = useState(todayKey());
   const [view, setView] = useState<View>('players');
@@ -71,6 +85,8 @@ export default function App() {
     setMeasurements([]);
     setTrainingSession(null);
     setMatches([]);
+    setAttendance([]);
+    setAttendanceLoaded(false);
     setHydratedToken('');
     setSelectedPlayer(null);
     setMeasurementDate(todayKey());
@@ -150,6 +166,20 @@ export default function App() {
       })
       .finally(() => setLoading(false));
   }, [auth?.token, auth?.role, view, matchesLoaded]);
+
+  useEffect(() => {
+    if (!auth || auth.role !== 'staff' || view !== 'attendance' || attendanceLoaded) return;
+    const cached = readAttendanceCache(auth);
+    if (cached) { setAttendance(cached.attendance); setAttendanceLoaded(true); }
+    else setLoading(true);
+    dataService.getAttendance(auth.token)
+      .then((nextAttendance) => { setAttendance(nextAttendance); setAttendanceLoaded(true); saveAttendanceCache(auth, nextAttendance); })
+      .catch((cause: Error) => {
+        if (cached) setToast('Asistencia disponible sin conexión; se actualizará al recuperar Google');
+        else setError(cause.message || 'No se pudo cargar la asistencia.');
+      })
+      .finally(() => setLoading(false));
+  }, [auth?.token, auth?.role, view, attendanceLoaded]);
 
   useEffect(() => {
     if (!toast) return;
@@ -254,6 +284,24 @@ export default function App() {
     } finally { setSaving(false); }
   };
 
+  const saveAttendance = async (input: AttendanceInput) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      const saved = await dataService.saveAttendance(auth.token, input);
+      setAttendance((current) => {
+        const next = [...current.filter((item) => item.date !== input.date), ...saved];
+        saveAttendanceCache(auth, next);
+        return next;
+      });
+      setToast('Asistencia guardada correctamente');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo guardar la asistencia.');
+      return false;
+    } finally { setSaving(false); }
+  };
+
   const setPlayerInjury = async (playerId: string, injury: InjuryInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
@@ -300,6 +348,7 @@ export default function App() {
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onInjuryChange={setPlayerInjury} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} onDelete={deleteMatch} />}
+        {!loading && auth.role === 'staff' && view === 'attendance' && <AttendancePanel players={players} measurements={measurements} attendance={attendance} saving={saving} onSave={saveAttendance} />}
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
