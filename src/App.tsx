@@ -9,6 +9,8 @@ import { PlayerGrid } from './components/PlayerGrid';
 import { PlayerForm } from './components/PlayerForm';
 import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
+import { PageNavigation } from './components/PageNavigation';
+import { environment } from './config';
 import { todayKey } from './utils/date';
 import { applyJuvenilRoster } from './utils/roster';
 import './styles.css';
@@ -272,6 +274,13 @@ export default function App() {
     } finally { setSaving(false); }
   };
 
+  const goBack = () => {
+    if (auth?.role === 'staff' && selectedPlayer) { setSelectedPlayer(null); setView('players'); return; }
+    if (auth?.role === 'staff' && view !== 'players') { setView('players'); return; }
+    if (window.history.length > 1) window.history.back();
+    else window.location.assign(environment.homeUrl);
+  };
+
   if (!auth) return (
     <div className="login-shell">
       <OfflineBanner offline={offline} />
@@ -285,6 +294,7 @@ export default function App() {
       <OfflineBanner offline={offline} />
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
+      <PageNavigation onBack={goBack} onHome={() => window.location.assign(environment.homeUrl)} />
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
       {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onInjuryChange={setPlayerInjury} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}

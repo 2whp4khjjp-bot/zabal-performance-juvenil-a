@@ -83,6 +83,14 @@ h1, h2, h3, .brand__name { font-family: 'Manrope', sans-serif; }
 .offline-banner { position: sticky; top: 0; z-index: 200; min-height: 38px; padding: 7px 16px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #4d3900; background: var(--yellow); font-size: .88rem; font-weight: 700; }
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 .app-header { min-height: 68px; padding: 0 28px; display: flex; align-items: center; gap: 30px; color: #fff; background: var(--navy); box-shadow: 0 2px 12px rgba(11, 31, 52, .2); }
+.page-navigation-shell { width: min(1440px, 100%); margin: 0 auto; padding: 18px 38px 0; }
+.page-navigation { width: max-content; padding: 3px; border: 1px solid #cfd9e4; border-radius: 10px; display: flex; align-items: stretch; gap: 3px; background: #fff; box-shadow: 0 5px 14px rgba(22, 54, 95, .08); }
+.page-navigation button { min-height: 35px; padding: 0 10px; border: 0; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px; color: #244f7f; background: transparent; font-weight: 700; }
+.page-navigation button:hover { background: #edf3f8; }
+.page-navigation button.page-navigation__home { color: var(--navy); background: var(--yellow); }
+.page-navigation button.page-navigation__home:hover { background: #ffd553; }
+.page-navigation > i { width: 1px; margin: 6px 0; background: #dbe2e9; }
+.page-navigation-shell ~ .page-shell { padding-top: 22px; }
 .main-nav { align-self: stretch; display: flex; }
 .main-nav button { padding: 0 19px; border: 0; border-bottom: 3px solid transparent; display: flex; align-items: center; gap: 8px; color: #bdcbdc; background: transparent; font-size: .9rem; font-weight: 700; }
 .main-nav button.active { color: #fff; border-bottom-color: var(--yellow); background: rgba(255,255,255,.045); }
@@ -446,6 +454,7 @@ tbody tr:hover { background: #f8fafc; }
   .main-nav button span { display: none; }
   .logout-button span { display: none; }
   .page-shell { padding: 28px 22px 50px; }
+  .page-navigation-shell { padding-right: 22px; padding-left: 22px; }
   .player-grid { grid-template-columns: repeat(3, 1fr); }
   .summary-counters { min-width: 330px; }
   .form-layout { grid-template-columns: 1fr; }
@@ -522,6 +531,10 @@ tbody tr:hover { background: #f8fafc; }
 
 @media (max-width: 430px) {
   .page-shell { padding-right: 14px; padding-left: 14px; }
+  .page-navigation-shell { padding: 14px 14px 0; }
+  .page-navigation button { width: 36px; padding: 0; justify-content: center; }
+  .page-navigation button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .page-navigation-shell ~ .page-shell { padding-top: 18px; }
   .player-grid { grid-template-columns: 1fr; }
   .recent-match-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
   .recent-match-actions { grid-column: 2 / -1; justify-self: end; }

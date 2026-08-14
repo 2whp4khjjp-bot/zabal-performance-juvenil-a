@@ -22,4 +22,5 @@ export const environment = {
     '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab',
   appsScriptUrl: import.meta.env.VITE_APPS_SCRIPT_URL || '',
   publicUrl: import.meta.env.VITE_PUBLIC_URL || window.location.origin,
+  homeUrl: import.meta.env.VITE_HOME_URL || 'https://rendimiento.atleticozabal.com/',
 };
