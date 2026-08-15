@@ -3,6 +3,7 @@ import type { Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { getAlertLevel } from '../utils/measurements';
 import { totalInjuryDays } from '../utils/injuries';
+import { addPdfFooters } from './pdfBrand';
 
 type ReportOptions = { kind: ReportKind; measurements: Measurement[]; players: Player[]; playerId?: string };
 type PdfDocument = import('jspdf').jsPDF;
@@ -142,6 +143,7 @@ async function generateTrendsReport(measurements: Measurement[], players: Player
       drawPlayerBlock(doc, player, measurements, index % 2 === 0 ? 10 : 151);
     });
   }
+  addPdfFooters(doc);
   doc.save(`zabal-tendencias-jugadores-${todayKey()}.pdf`);
 }
 
@@ -192,17 +194,12 @@ export const generatePdfReport = async ({ kind, measurements, players, playerId 
     headStyles: { fillColor: [22, 54, 95], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 34 }, 2: { cellWidth: 18 }, 3: { cellWidth: 14 }, 4: { cellWidth: 17 } },
-    didDrawPage: (data) => {
-      doc.setFontSize(8);
-      doc.setTextColor(100);
-      doc.text(`Zabal Performance · ${reportTitle[kind]}`, 14, 290);
-      doc.text(`Página ${data.pageNumber}`, 190, 290, { align: 'right' });
-    },
   });
 
   if (!items.length) {
     doc.setFont('helvetica', 'normal');
     doc.text('No hay mediciones para los filtros de este informe.', 14, 76);
   }
+  addPdfFooters(doc);
   doc.save(`zabal-${kind}-${todayKey()}.pdf`);
 };

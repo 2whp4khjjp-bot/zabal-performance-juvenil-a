@@ -383,6 +383,8 @@ tbody tr:hover { background: #f8fafc; }
 .count-badge--blue { color: #245f95; background: #e3eff9; }
 .match-totals-card { padding: 0; overflow: hidden; }
 .match-totals-card .panel-card__heading { margin: 0; padding: 20px 22px 14px; }
+.match-totals-heading-actions { display: flex; align-items: center; gap: 9px; }
+.match-totals-heading-actions .button { min-height: 38px; padding: 0 12px; font-size: .78rem; }
 .match-totals-card th { padding: 12px 13px; font-size: .74rem; font-weight: 800; }
 .recent-match-list { display: grid; }
 .recent-match-row { padding: 13px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 11px; }
@@ -583,6 +585,8 @@ tbody tr:hover { background: #f8fafc; }
   .discipline-alert-row { grid-template-columns: minmax(0, 1fr) auto auto; }
   .discipline-alert-row em { grid-column: 1 / -1; }
   .discipline-ranking-list { grid-template-columns: 1fr; }
+  .match-totals-card .panel-card__heading { align-items: flex-start; flex-direction: column; }
+  .match-totals-heading-actions { width: 100%; justify-content: space-between; }
   .attendance-toolbar { align-items: stretch; flex-direction: column; }
   .attendance-toolbar > label { justify-content: space-between; }
   .attendance-counts { display: grid; grid-template-columns: repeat(3, 1fr); }

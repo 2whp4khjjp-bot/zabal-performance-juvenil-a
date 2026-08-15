@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, CalendarDays, Check, Clock3, Goal, History, Medal, Pencil, Save, ShieldAlert, Star, Trash2, Trophy, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarDays, Check, Clock3, FileDown, Goal, History, Medal, Pencil, Save, ShieldAlert, Star, Trash2, Trophy, UsersRound, X } from 'lucide-react';
 import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { appConfig } from '../config';
+import { generateMinutesPdf } from '../services/matchReports';
 
 const durationOptions = [40, 50, 60, 70, 80, 90] as const;
 
@@ -34,6 +35,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [yellowByPlayer, setYellowByPlayer] = useState<Record<string, string>>({});
   const [redByPlayer, setRedByPlayer] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [generatingMinutesPdf, setGeneratingMinutesPdf] = useState(false);
   const formPlayers = editingId ? allPlayers : eligiblePlayers;
 
   useEffect(() => {
@@ -192,7 +194,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       </form> : mode === 'history' ? <section className="matches-history" aria-label="Historial de partidos">
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
-            <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><span className="count-badge count-badge--blue">{matches.length}</span></div>
+            <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><div className="match-totals-heading-actions"><button type="button" className="button button--secondary" disabled={generatingMinutesPdf || !totals.length} onClick={() => { setGeneratingMinutesPdf(true); void generateMinutesPdf(players, matches).finally(() => setGeneratingMinutesPdf(false)); }}><FileDown size={17} /> {generatingMinutesPdf ? 'Creando…' : 'Informe PDF'}</button><span className="count-badge count-badge--blue">{matches.length}</span></div></div>
             {totals.length ? <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Conv.</th><th>Tit.</th><th>PJ</th><th>Minutos</th><th>Goles</th><th>TA</th><th>TR</th></tr></thead><tbody>{totals.map((item) => { const warning = item.yellowCards > 0 && (item.yellowCards % 5 === 4 || item.yellowCards % 5 === 0); return <tr key={item.player.id} className={warning ? 'discipline-warning-row' : ''}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong>{warning && <small className="discipline-warning"><AlertTriangle size={13} /> Alerta por acumulación</small>}</td><td>{item.callUps}</td><td>{item.starts}</td><td>{item.appearances}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td><td><strong>{item.yellowCards}</strong></td><td><strong>{item.redCards}</strong></td></tr>; })}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin actas registradas</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">
