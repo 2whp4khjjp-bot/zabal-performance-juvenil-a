@@ -23,7 +23,7 @@ const HEADERS = {
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
   'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular'],
-  Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'creado_en', 'actualizado_en'],
+  Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'motivo', 'creado_en', 'actualizado_en'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'minutos_retraso', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
 
@@ -193,7 +193,7 @@ function getPlayers_(session) {
   const injuriesByPlayer = {};
   getInjuryPeriods_().forEach(function(period) {
     if (!injuriesByPlayer[period.playerId]) injuriesByPlayer[period.playerId] = [];
-    injuriesByPlayer[period.playerId].push({ id: period.id, startDate: period.startDate, endDate: period.endDate });
+    injuriesByPlayer[period.playerId].push({ id: period.id, startDate: period.startDate, endDate: period.endDate, reason: period.reason });
   });
   return rows_(SHEETS.PLAYERS).filter(function(row) { return boolean_(row.activo) && (!session || session.role === 'staff' || String(row.id) === String(session.playerId)); }).map(function(row) {
     const name = String(row.nombre);
@@ -206,7 +206,7 @@ function getPlayers_(session) {
 function getInjuryPeriods_() {
   ensureInjuriesSheet_();
   return rows_(SHEETS.INJURIES).map(function(row) {
-    return { id: String(row.id), playerId: String(row.jugador_id), playerName: String(row.jugador_nombre), startDate: dateKey_(row.fecha_inicio), endDate: row.fecha_fin ? dateKey_(row.fecha_fin) : undefined };
+    return { id: String(row.id), playerId: String(row.jugador_id), playerName: String(row.jugador_nombre), startDate: dateKey_(row.fecha_inicio), endDate: row.fecha_fin ? dateKey_(row.fecha_fin) : undefined, reason: String(row.motivo || '') };
   }).sort(function(a, b) { return a.startDate.localeCompare(b.startDate); });
 }
 
@@ -214,8 +214,6 @@ function ensureInjuriesSheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if (!id) throw apiError_('La hoja de cálculo no está configurada.', 'CONFIG');
   const spreadsheet = SpreadsheetApp.openById(id);
-  const existing = spreadsheet.getSheetByName(SHEETS.INJURIES);
-  if (existing) return existing;
   ensureSheet_(spreadsheet, SHEETS.INJURIES, HEADERS.Bajas);
   return spreadsheet.getSheetByName(SHEETS.INJURIES);
 }
@@ -239,8 +237,10 @@ function setPlayerInjury_(playerId, injury, session) {
     const legacy = Object.prototype.hasOwnProperty.call(injury || {}, 'injured');
     const startDate = legacy ? (active ? active.startDate : dateKey_(new Date())) : String(injury.startDate || '');
     const endDate = legacy ? (injury.injured ? '' : dateKey_(new Date())) : String(injury.endDate || '');
+    const reason = String(injury.reason || (active && active.reason) || 'Motivo pendiente de completar').replace(/[<>]/g, '').trim().slice(0, 160);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw apiError_('Indica una fecha de inicio válida.', 'VALIDATION');
     if (endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate)) throw apiError_('La fecha final no puede ser anterior al inicio.', 'VALIDATION');
+    if (!reason) throw apiError_('Indica el motivo de la baja.', 'VALIDATION');
     const injuriesSheet = ensureInjuriesSheet_();
     const injuryValues = injuriesSheet.getDataRange().getValues();
     const injuryHeaders = injuryValues[0].map(String);
@@ -250,9 +250,11 @@ function setPlayerInjury_(playerId, injury, session) {
       const rowNumber = activeIndex + 2;
       injuriesSheet.getRange(rowNumber, injuryHeaders.indexOf('fecha_inicio') + 1).setValue(startDate);
       injuriesSheet.getRange(rowNumber, injuryHeaders.indexOf('fecha_fin') + 1).setValue(endDate || '');
+      injuriesSheet.getRange(rowNumber, injuryHeaders.indexOf('motivo') + 1).setValue(reason);
       injuriesSheet.getRange(rowNumber, injuryHeaders.indexOf('actualizado_en') + 1).setValue(now);
     } else {
-      injuriesSheet.appendRow([Utilities.getUuid(), String(playerId), playerName, startDate, endDate || '', now, now]);
+      const newPeriod = { id: Utilities.getUuid(), jugador_id: String(playerId), jugador_nombre: playerName, fecha_inicio: startDate, fecha_fin: endDate || '', motivo: reason, creado_en: now, actualizado_en: now };
+      injuriesSheet.appendRow(injuryHeaders.map(function(header) { return newPeriod[header] === undefined ? '' : newPeriod[header]; }));
     }
     playersSheet.getRange(index + 1, injuryColumn + 1).setValue(!endDate);
     return getPlayers_({ role: 'staff' }).find(function(player) { return player.id === String(playerId); });

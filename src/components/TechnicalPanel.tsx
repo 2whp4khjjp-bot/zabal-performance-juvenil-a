@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownAZ, CalendarDays, Download, FileDown, Filter, Search, TrendingUp, UsersRound } from 'lucide-react';
-import type { AlertLevel, MatchRecord, Measurement, Player, ReportKind } from '../types';
+import type { AlertLevel, AttendanceRecord, MatchRecord, Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { average, getAlertLevel, recentForPlayer, weightChange } from '../utils/measurements';
 import { exportCsv, exportExcel } from '../services/exports';
@@ -19,7 +19,7 @@ const initialFilters: Filters = { query: '', playerId: '', from: '', to: '', min
 
 const statusText: Record<AlertLevel, string> = { pending: 'Pendiente', partial: 'Parcial', normal: 'Normal', moderate: 'Moderado', alert: 'Alerta' };
 
-export function TechnicalPanel({ players, measurements, matches }: { players: Player[]; measurements: Measurement[]; matches: MatchRecord[] }) {
+export function TechnicalPanel({ players, measurements, matches, attendance }: { players: Player[]; measurements: Measurement[]; matches: MatchRecord[]; attendance: AttendanceRecord[] }) {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
@@ -67,7 +67,7 @@ export function TechnicalPanel({ players, measurements, matches }: { players: Pl
   const selectedPlayer = players.find((player) => player.id === individualId);
   const maxWeekly = Math.max(1, ...players.map((player) => measurements.filter((item) => item.playerId === player.id).slice(-7).length));
 
-  const pdf = (kind: ReportKind) => generatePdfReport({ kind, measurements, players, playerId: individualId || players[0]?.id });
+  const pdf = (kind: ReportKind) => generatePdfReport({ kind, measurements, players, matches, attendance, playerId: individualId || players[0]?.id });
 
   return (
     <main className="page-shell technical-page">
@@ -141,7 +141,7 @@ export function TechnicalPanel({ players, measurements, matches }: { players: Pl
 
       <section className="technical-split insights-section">
         <article className="panel-card individual-card">
-          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Vista individual</p><h2>Evolución del jugador</h2></div><button className="button button--secondary" disabled={!individualId} onClick={() => void pdf('player')}><FileDown size={17} /> PDF</button></div>
+          <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Vista individual</p><h2>Evolución del jugador</h2></div><button className="button button--secondary" disabled={!individualId} onClick={() => void pdf('player')}><FileDown size={17} /> Informe integral PDF</button></div>
           <select value={individualId} onChange={(event) => setIndividualId(event.target.value)} aria-label="Seleccionar jugador para ver su evolución"><option value="">Selecciona un jugador</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select>
           {selectedPlayer ? <div className="individual-insight"><h3>{selectedPlayer.name}</h3><div className="insight-stats"><span>Último peso <strong>{selectedHistory.map((item) => item.weight).filter((value) => value !== undefined).at(-1) ?? '—'} kg</strong></span><span>Fatiga media <strong>{average(selectedHistory.map((item) => item.fatigue)).toFixed(1)}</strong></span><span>Molestias media <strong>{average(selectedHistory.map((item) => item.soreness)).toFixed(1)}</strong></span></div><Sparkline values={selectedHistory.map((item) => item.weight).filter((value): value is number => value !== undefined)} label="Evolución individual del peso" /></div> : <p className="muted-copy">Selecciona un jugador para ver solo sus últimos controles.</p>}
         </article>

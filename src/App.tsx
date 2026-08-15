@@ -168,7 +168,7 @@ export default function App() {
   }, [auth?.token, auth?.role, view, matchesLoaded]);
 
   useEffect(() => {
-    if (!auth || auth.role !== 'staff' || view !== 'attendance' || attendanceLoaded) return;
+    if (!auth || auth.role !== 'staff' || (view !== 'attendance' && view !== 'technical') || attendanceLoaded) return;
     const cached = readAttendanceCache(auth);
     if (cached) { setAttendance(cached.attendance); setAttendanceLoaded(true); }
     else setLoading(true);
@@ -349,7 +349,7 @@ export default function App() {
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} onDelete={deleteMatch} />}
         {!loading && auth.role === 'staff' && view === 'attendance' && <AttendancePanel players={players} measurements={measurements} attendance={attendance} saving={saving} onSave={saveAttendance} />}
-        {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} />}
+        {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} attendance={attendance} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       <SiteFooter />

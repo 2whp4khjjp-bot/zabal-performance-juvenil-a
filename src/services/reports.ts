@@ -1,11 +1,12 @@
 import { appConfig } from '../config';
-import type { Measurement, Player, ReportKind } from '../types';
+import type { AttendanceRecord, MatchRecord, Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { getAlertLevel } from '../utils/measurements';
 import { totalInjuryDays } from '../utils/injuries';
 import { addPdfFooters } from './pdfBrand';
+import { generatePlayerPdf } from './playerReport';
 
-type ReportOptions = { kind: ReportKind; measurements: Measurement[]; players: Player[]; playerId?: string };
+type ReportOptions = { kind: ReportKind; measurements: Measurement[]; players: Player[]; matches?: MatchRecord[]; attendance?: AttendanceRecord[]; playerId?: string };
 type PdfDocument = import('jspdf').jsPDF;
 type Rgb = [number, number, number];
 
@@ -147,13 +148,17 @@ async function generateTrendsReport(measurements: Measurement[], players: Player
   doc.save(`zabal-tendencias-jugadores-${todayKey()}.pdf`);
 }
 
-export const generatePdfReport = async ({ kind, measurements, players, playerId }: ReportOptions) => {
+export const generatePdfReport = async ({ kind, measurements, players, matches = [], attendance = [], playerId }: ReportOptions) => {
   if (kind === 'weekly') return generateTrendsReport(measurements, players);
+  if (kind === 'player') {
+    const player = players.find((item) => item.id === playerId);
+    if (!player) return;
+    return generatePlayerPdf(player, measurements, matches, attendance);
+  }
 
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   let items = [...measurements];
   if (kind === 'daily') items = items.filter((item) => item.date === todayKey());
-  if (kind === 'player') items = items.filter((item) => item.playerId === playerId).slice(-30);
   if (kind === 'alerts') items = items.filter((item) => getAlertLevel(item) === 'alert');
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -171,7 +176,7 @@ export const generatePdfReport = async ({ kind, measurements, players, playerId 
   doc.setFontSize(9);
   doc.text(`${appConfig.teamName} · Generado ${new Date().toLocaleString('es-ES')}`, 14, 46);
 
-  const reportPlayers = kind === 'player' ? players.filter((player) => player.id === playerId) : players;
+  const reportPlayers = players;
   const injurySummary = reportPlayers.filter((player) => (player.injuries?.length ?? 0) > 0).map((player) => `${player.name}: ${totalInjuryDays(player)} días${player.injured ? ' (activa)' : ''}`);
 
   const registered = new Set(items.map((item) => item.playerId)).size;

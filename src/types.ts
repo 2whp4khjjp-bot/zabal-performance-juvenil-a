@@ -14,11 +14,13 @@ export type InjuryPeriod = {
   id: string;
   startDate: string;
   endDate?: string;
+  reason?: string;
 };
 
 export type InjuryInput = {
   startDate: string;
   endDate?: string;
+  reason?: string;
 };
 
 export type Measurement = {

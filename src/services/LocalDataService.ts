@@ -251,7 +251,9 @@ export class LocalDataService implements DataService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(injury.startDate) || (injury.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(injury.endDate) || injury.endDate < injury.startDate))) throw new DataServiceError('Revisa las fechas de la baja.', 'VALIDATION');
     const periods = [...(players[index].injuries ?? [])];
     const activeIndex = periods.findIndex((period) => !period.endDate);
-    const period = { id: activeIndex >= 0 ? periods[activeIndex].id : crypto.randomUUID(), startDate: injury.startDate, endDate: injury.endDate || undefined };
+    const reason = injury.reason?.replace(/[<>]/g, '').trim().slice(0, 160) || periods[activeIndex]?.reason;
+    if (!reason) throw new DataServiceError('Indica el motivo de la baja.', 'VALIDATION');
+    const period = { id: activeIndex >= 0 ? periods[activeIndex].id : crypto.randomUUID(), startDate: injury.startDate, endDate: injury.endDate || undefined, reason };
     if (activeIndex >= 0) periods[activeIndex] = period;
     else periods.push(period);
     players[index] = { ...players[index], injured: !injury.endDate, injuries: periods };
