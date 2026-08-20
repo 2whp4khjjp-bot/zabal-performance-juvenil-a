@@ -67,8 +67,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   }, [matches, players]);
 
   const rankings = useMemo(() => ({
-    scorers: [...totals].filter((item) => item.goals > 0).sort((a, b) => b.goals - a.goals || b.minutes - a.minutes).slice(0, 3),
-    callUps: [...totals].filter((item) => item.callUps > 0).sort((a, b) => b.callUps - a.callUps || b.minutes - a.minutes).slice(0, 20),
+    scorers: [...totals].filter((item) => item.goals > 0).sort((a, b) => b.goals - a.goals || b.minutes - a.minutes).slice(0, 5),
+    callUps: [...totals].sort((a, b) => b.callUps - a.callUps || b.minutes - a.minutes).slice(0, 20),
     starters: [...totals].filter((item) => item.starts > 0).sort((a, b) => b.starts - a.starts || b.minutes - a.minutes).slice(0, 11),
     minutes: [...totals].filter((item) => item.minutes > 0).sort((a, b) => b.minutes - a.minutes).slice(0, 5),
     discipline: totals.filter((item) => item.redCards > 0 || (item.yellowCards > 0 && (item.yellowCards % 5 === 4 || item.yellowCards % 5 === 0))).sort((a, b) => b.yellowCards - a.yellowCards || b.redCards - a.redCards),
@@ -203,7 +203,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
           </article>
         </div>
       </section> : <section className="match-rankings" aria-label="Estadísticas de partidos">
-        <article className="panel-card ranking-card ranking-card--scorers"><div className="ranking-heading"><span><Goal /></span><div><p className="eyebrow eyebrow--dark">Top 3</p><h2>Máximos goleadores</h2></div></div><RankingList items={rankings.scorers} value={(item) => item.goals} suffix="goles" podium /></article>
+        <article className="panel-card ranking-card ranking-card--scorers"><div className="ranking-heading"><span><Goal /></span><div><p className="eyebrow eyebrow--dark">Top 5</p><h2>Máximos goleadores</h2></div></div><RankingList items={rankings.scorers} value={(item) => item.goals} suffix="goles" podium /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><UsersRound /></span><div><p className="eyebrow eyebrow--dark">Top 20</p><h2>Más convocados</h2></div></div><RankingList items={rankings.callUps} value={(item) => item.callUps} suffix="conv." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Star /></span><div><p className="eyebrow eyebrow--dark">Top 11</p><h2>Más titularidades</h2></div></div><RankingList items={rankings.starters} value={(item) => item.starts} suffix="tit." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Clock3 /></span><div><p className="eyebrow eyebrow--dark">Top 5</p><h2>Más minutos</h2></div></div><RankingList items={rankings.minutes} value={(item) => item.minutes} suffix="min" /></article>

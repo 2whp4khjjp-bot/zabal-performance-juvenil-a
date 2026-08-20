@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -10,6 +10,7 @@ import { PlayerForm } from './components/PlayerForm';
 import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
 import { PageNavigation } from './components/PageNavigation';
+import { BirthdayBanner, BirthdayPrompt } from './components/BirthdayPrompt';
 import { environment } from './config';
 import { todayKey } from './utils/date';
 import { applyJuvenilRoster } from './utils/roster';
@@ -76,6 +77,17 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [offline, setOffline] = useState(!navigator.onLine);
   const [hydratedToken, setHydratedToken] = useState('');
+  const [birthdayState, setBirthdayState] = useState<BirthdayState>({ needsBirthDate: false, birthdaysToday: [] });
+  const [birthdayNoticeOpen, setBirthdayNoticeOpen] = useState(false);
+
+  const applyBirthdayState = (bootstrap: BootstrapData) => {
+    const next = {
+      needsBirthDate: Boolean(bootstrap.needsBirthDate),
+      birthdaysToday: Array.isArray(bootstrap.birthdaysToday) ? bootstrap.birthdaysToday : [],
+    };
+    setBirthdayState(next);
+    setBirthdayNoticeOpen(next.birthdaysToday.length > 0);
+  };
 
   const logout = async () => {
     if (auth) void dataService.logout(auth.token).catch(() => undefined);
@@ -87,6 +99,8 @@ export default function App() {
     setMatches([]);
     setAttendance([]);
     setAttendanceLoaded(false);
+    setBirthdayState({ needsBirthDate: false, birthdaysToday: [] });
+    setBirthdayNoticeOpen(false);
     setHydratedToken('');
     setSelectedPlayer(null);
     setMeasurementDate(todayKey());
@@ -125,13 +139,15 @@ export default function App() {
       setLoading(false);
     }
     setLoading(!cached);
-    dataService.getBootstrap(auth.token).then(({ players: nextPlayers, measurements: nextMeasurements, session: nextSession }) => {
+    dataService.getBootstrap(auth.token).then((bootstrap) => {
+      const { players: nextPlayers, measurements: nextMeasurements, session: nextSession } = bootstrap;
       const roster = applyJuvenilRoster(nextPlayers);
       setPlayers(roster);
       setMeasurements(nextMeasurements);
       setTrainingSession(nextSession);
       setHydratedToken(auth.token);
       saveRosterCache(auth, roster, nextSession);
+      applyBirthdayState(bootstrap);
       if (auth.role === 'player') setSelectedPlayer(roster[0] ?? null);
       if (auth.role === 'staff') {
         void dataService.getMeasurements(auth.token)
@@ -200,6 +216,7 @@ export default function App() {
         setTrainingSession(bootstrap.session);
         saveRosterCache(session, nextPlayers, bootstrap.session);
         setHydratedToken(session.token);
+        applyBirthdayState(bootstrap);
         if (role === 'player') setSelectedPlayer(nextPlayers[0] ?? null);
         if (role === 'staff') {
           void dataService.getMeasurements(session.token)
@@ -233,6 +250,24 @@ export default function App() {
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar la medición.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveBirthDate = async (birthDate: string) => {
+    if (!auth || auth.role !== 'player') return false;
+    setSaving(true);
+    setError('');
+    try {
+      const next = await dataService.saveBirthDate(auth.token, birthDate);
+      setBirthdayState(next);
+      setBirthdayNoticeOpen(next.birthdaysToday.length > 0);
+      setToast('Cumpleaños guardado correctamente');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo guardar la fecha de cumpleaños.');
       return false;
     } finally {
       setSaving(false);
@@ -341,6 +376,7 @@ export default function App() {
     <div className="app">
       <OfflineBanner offline={offline} />
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
+      {birthdayNoticeOpen && <BirthdayBanner names={birthdayState.birthdaysToday} onClose={() => setBirthdayNoticeOpen(false)} />}
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
       <PageNavigation onBack={goBack} onHome={() => window.location.assign(environment.homeUrl)} />
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
@@ -352,6 +388,7 @@ export default function App() {
         {!loading && auth.role === 'staff' && view === 'technical' && <TechnicalPanel players={players} measurements={measurements} matches={matches} attendance={attendance} />}
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
+      {auth.role === 'player' && birthdayState.needsBirthDate && <BirthdayPrompt playerName={auth.playerName || 'jugador'} saving={saving} onSave={saveBirthDate} />}
       <SiteFooter />
     </div>
   );

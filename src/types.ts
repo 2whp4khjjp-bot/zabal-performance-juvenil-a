@@ -114,6 +114,13 @@ export type BootstrapData = {
   players: Player[];
   measurements: Measurement[];
   session: TrainingSession;
+  needsBirthDate?: boolean;
+  birthdaysToday?: string[];
+};
+
+export type BirthdayState = {
+  needsBirthDate: boolean;
+  birthdaysToday: string[];
 };
 
 export type LoginResult = {
