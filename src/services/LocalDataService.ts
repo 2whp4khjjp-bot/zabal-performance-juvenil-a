@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
@@ -10,6 +10,7 @@ const MEASUREMENTS_KEY = 'zabal-demo-measurements-v1';
 const PLAYERS_KEY = 'zabal-demo-players-v1';
 const MATCHES_KEY = 'zabal-demo-matches-v1';
 const ATTENDANCE_KEY = 'zabal-demo-attendance-v1';
+const BIRTHDAYS_KEY = 'zabal-demo-birthdays-v1';
 
 const sha256 = async (value: string) => {
   const bytes = new TextEncoder().encode(value);
@@ -62,10 +63,37 @@ export class LocalDataService implements DataService {
   async logout(token: string): Promise<void> { this.sessions.delete(token); }
 
   async getBootstrap(token: string): Promise<BootstrapData> {
+    const auth = this.requireSession(token);
     const [players, measurements, session] = await Promise.all([
       this.getPlayers(token), this.getMeasurements(token), this.getCurrentSession(token),
     ]);
-    return { players, measurements, session };
+    const birthdayState = this.getBirthdayState(auth);
+    return { players, measurements, session, ...birthdayState };
+  }
+
+  private getBirthdayState(auth: AuthSession): BirthdayState {
+    const birthdays = readJson<Record<string, string>>(BIRTHDAYS_KEY, {});
+    const allPlayers = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active && !player.staffMember);
+    const today = todayKey().slice(5);
+    return {
+      needsBirthDate: auth.role === 'player' && Boolean(auth.playerId) && !birthdays[auth.playerId!],
+      birthdaysToday: allPlayers.filter((player) => birthdays[player.id]?.slice(5) === today).map((player) => player.name),
+    };
+  }
+
+  async saveBirthDate(token: string, birthDate: string): Promise<BirthdayState> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'player' || !auth.playerId) throw new DataServiceError('Solo el jugador puede registrar su fecha de cumpleaños.', 'FORBIDDEN');
+    const clean = String(birthDate || '').trim();
+    const date = new Date(`${clean}T12:00:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(clean) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== clean || clean > todayKey() || clean < '1900-01-01') {
+      throw new DataServiceError('Introduce una fecha de cumpleaños válida.', 'VALIDATION');
+    }
+    const birthdays = readJson<Record<string, string>>(BIRTHDAYS_KEY, {});
+    if (birthdays[auth.playerId]) throw new DataServiceError('La fecha de cumpleaños ya está registrada.', 'BIRTHDATE_ALREADY_SET');
+    birthdays[auth.playerId] = clean;
+    localStorage.setItem(BIRTHDAYS_KEY, JSON.stringify(birthdays));
+    return this.getBirthdayState(auth);
   }
 
   async getPlayers(token: string): Promise<Player[]> {

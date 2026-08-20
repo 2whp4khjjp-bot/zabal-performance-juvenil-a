@@ -29,6 +29,19 @@ describe('servicio local', () => {
     expect(players).toHaveLength(1);
     expect(measurements.every((item) => item.playerId === players[0].id)).toBe(true);
   });
+  it('pide el cumpleaños una vez y anuncia solo el nombre cuando coincide con hoy', async () => {
+    const service = new LocalDataService();
+    const { auth, bootstrap } = await service.authenticate('1001', 'player');
+    expect(bootstrap?.needsBirthDate).toBe(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const saved = await service.saveBirthDate(auth.token, today);
+    expect(saved).toEqual({ needsBirthDate: false, birthdaysToday: ['Adrián Vega'] });
+    await expect(service.saveBirthDate(auth.token, today)).rejects.toThrow('ya está registrada');
+
+    const { bootstrap: staffBootstrap } = await service.authenticate('2026', 'staff');
+    expect(staffBootstrap?.birthdaysToday).toEqual(['Adrián Vega']);
+    expect(staffBootstrap).not.toHaveProperty('birthDate');
+  });
   it('guarda minutos de partido solo para el cuerpo técnico', async () => {
     const service = new LocalDataService();
     const { auth: staff } = await service.authenticate('2026', 'staff');

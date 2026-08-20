@@ -1,4 +1,4 @@
-import type { AttendanceInput, AttendanceRecord, AuthRole, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, BirthdayState, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -11,7 +11,7 @@ export class GoogleSheetsDataService implements DataService {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');
     let response: Response | undefined;
     let serviceReached = false;
-    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'saveAttendance', 'setPlayerInjury'].includes(action);
+    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'saveAttendance', 'setPlayerInjury', 'saveBirthDate'].includes(action);
     const maxAttempts = 2;
     // Apps Script puede necesitar algo más de margen al despertar y escribir
     // un acta completa, especialmente desde conexiones móviles.
@@ -112,5 +112,9 @@ export class GoogleSheetsDataService implements DataService {
 
   setPlayerInjury(token: string, playerId: string, injury: InjuryInput) {
     return this.request<Player>('setPlayerInjury', { token, playerId, injury });
+  }
+
+  saveBirthDate(token: string, birthDate: string) {
+    return this.request<BirthdayState>('saveBirthDate', { token, birthDate });
   }
 }

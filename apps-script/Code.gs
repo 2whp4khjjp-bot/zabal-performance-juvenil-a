@@ -16,7 +16,7 @@ const SHEETS = {
 const MAX_STARTERS = 11; // Cambiar a 7 al desplegar una categoría de fútbol 7.
 
 const HEADERS = {
-  Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash', 'baja_lesion'],
+  Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash', 'baja_lesion', 'fecha_nacimiento'],
   Mediciones: ['id', 'fecha', 'hora', 'fecha_hora', 'jugador_id', 'jugador_nombre', 'peso', 'fatiga', 'molestias', 'comentarios', 'sesion_id', 'creado_por', 'actualizado_en'],
   Sesiones: ['id', 'fecha', 'tipo_sesion', 'rival', 'jornada', 'activa', 'hora_apertura', 'hora_cierre'],
   Configuración: ['clave', 'valor'],
@@ -68,7 +68,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 4 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 5 } });
 }
 
 function doPost(event) {
@@ -90,6 +90,7 @@ function doPost(event) {
     if (action === 'getAttendance') return json_({ ok: true, data: getAttendance_(session) });
     if (action === 'saveAttendance') return json_({ ok: true, data: saveAttendance_(input.attendance, session) });
     if (action === 'setPlayerInjury') return json_({ ok: true, data: setPlayerInjury_(input.playerId, input.injury || { injured: input.injured }, session) });
+    if (action === 'saveBirthDate') return json_({ ok: true, data: saveBirthDate_(input.birthDate, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -164,10 +165,13 @@ function authenticate_(pin, requestedRole, includeBootstrap) {
 }
 
 function getLoginBootstrap_(session) {
+  const birthdayState = getBirthdayState_(session);
   return {
     players: getPlayers_(session),
     measurements: session.role === 'player' ? getMeasurements_(session) : [],
     session: getCurrentSession_(),
+    needsBirthDate: birthdayState.needsBirthDate,
+    birthdaysToday: birthdayState.birthdaysToday,
   };
 }
 
@@ -197,7 +201,7 @@ function getPlayers_(session) {
   });
   return rows_(SHEETS.PLAYERS).filter(function(row) { return boolean_(row.activo) && (!session || session.role === 'staff' || String(row.id) === String(session.playerId)); }).map(function(row) {
     const name = String(row.nombre);
-    const staffMember = /\bCT\b|cuerpo t[ée]cnico|entrenador|preparador|fisio|delegado/i.test(name);
+    const staffMember = isStaffName_(name);
     const injuries = injuriesByPlayer[String(row.id)] || [];
     return { id: String(row.id), name: name, number: staffMember ? undefined : numberOrNull_(row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: injuries.some(function(period) { return !period.endDate; }) || boolean_(row.baja_lesion), injuries: injuries, staffMember: staffMember };
   }).sort(function(a, b) { return Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number || 999) - (b.number || 999) || a.order - b.order; });
@@ -349,13 +353,94 @@ function saveAttendance_(input, session) {
 }
 
 function getBootstrap_(session) {
+  const birthdayState = getBirthdayState_(session);
   return {
     players: getPlayers_(session),
     // El histórico completo puede crecer mucho y no debe bloquear la entrada
     // del cuerpo técnico a la plantilla. Se carga después, en segundo plano.
     measurements: session.role === 'player' ? getMeasurements_(session) : [],
     session: getCurrentSession_(),
+    needsBirthDate: birthdayState.needsBirthDate,
+    birthdaysToday: birthdayState.birthdaysToday,
   };
+}
+
+function isStaffName_(name) {
+  return /\bCT\b|cuerpo t[ée]cnico|entrenador|preparador|fisio|delegado/i.test(String(name || ''));
+}
+
+function birthdayMonthDay_(value) {
+  if (!value) return '';
+  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, Session.getScriptTimeZone(), 'MM-dd');
+  const clean = String(value).trim();
+  const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return match[2] + '-' + match[3];
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? '' : Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'MM-dd');
+}
+
+function getBirthdayState_(session) {
+  const playersSheet = sheet_(SHEETS.PLAYERS);
+  const values = playersSheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const idColumn = headers.indexOf('id');
+  const nameColumn = headers.indexOf('nombre');
+  const activeColumn = headers.indexOf('activo');
+  const birthdayColumn = headers.indexOf('fecha_nacimiento');
+  const todayMonthDay = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM-dd');
+  const birthdaysToday = [];
+  let needsBirthDate = false;
+  values.slice(1).forEach(function(row) {
+    if (!boolean_(row[activeColumn])) return;
+    const name = String(row[nameColumn] || '');
+    if (isStaffName_(name)) return;
+    const birthday = birthdayColumn >= 0 ? row[birthdayColumn] : '';
+    if (birthdayMonthDay_(birthday) === todayMonthDay) birthdaysToday.push(name);
+    if (session.role === 'player' && String(row[idColumn]) === String(session.playerId) && !birthday) needsBirthDate = true;
+  });
+  return { needsBirthDate: needsBirthDate, birthdaysToday: birthdaysToday };
+}
+
+function saveBirthDate_(birthDate, session) {
+  if (!session || session.role !== 'player' || !session.playerId) throw apiError_('Solo el jugador puede registrar su fecha de cumpleaños.', 'FORBIDDEN');
+  const clean = String(birthDate || '').trim();
+  const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw apiError_('Introduce una fecha de cumpleaños válida.', 'VALIDATION');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day, 12, 0, 0);
+  if (year < 1900 || parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day || clean > dateKey_(new Date())) {
+    throw apiError_('Introduce una fecha de cumpleaños válida.', 'VALIDATION');
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const playersSheet = sheet_(SHEETS.PLAYERS);
+    let values = playersSheet.getDataRange().getValues();
+    let headers = values[0].map(String);
+    let birthdayColumn = headers.indexOf('fecha_nacimiento');
+    if (birthdayColumn < 0) {
+      birthdayColumn = headers.length;
+      playersSheet.getRange(1, birthdayColumn + 1).setValue('fecha_nacimiento');
+      values = playersSheet.getDataRange().getValues();
+      headers = values[0].map(String);
+    }
+    const idColumn = headers.indexOf('id');
+    const nameColumn = headers.indexOf('nombre');
+    const activeColumn = headers.indexOf('activo');
+    for (let index = 1; index < values.length; index += 1) {
+      if (String(values[index][idColumn]) !== String(session.playerId) || !boolean_(values[index][activeColumn])) continue;
+      if (isStaffName_(values[index][nameColumn])) throw apiError_('Este perfil no necesita una fecha de cumpleaños.', 'FORBIDDEN');
+      if (values[index][birthdayColumn]) throw apiError_('La fecha de cumpleaños ya está registrada.', 'BIRTHDATE_ALREADY_SET');
+      const target = playersSheet.getRange(index + 1, birthdayColumn + 1);
+      target.setNumberFormat('@');
+      target.setValue(clean);
+      return getBirthdayState_(session);
+    }
+    throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
+  } finally { lock.releaseLock(); }
 }
 
 function getMatches_(session) {
