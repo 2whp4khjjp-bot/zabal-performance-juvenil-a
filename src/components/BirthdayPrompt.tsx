@@ -21,12 +21,12 @@ export function BirthdayPrompt({ playerName, saving, onSave }: { playerName: str
     <form className="birthday-card" onSubmit={(event) => void submit(event)}>
       <div className="birthday-card__icon"><CakeSlice size={30} /></div>
       <p className="eyebrow eyebrow--dark">Completa tu perfil</p>
-      <h2 id="birthday-title">¿Cuándo es tu cumpleaños, {playerName.split(' ')[0]}?</h2>
-      <p>Solo te lo pediremos esta vez. El día de tu cumpleaños la plantilla verá un mensaje para felicitarte.</p>
-      <label htmlFor="birth-date"><CalendarDays size={18} /> Fecha de cumpleaños</label>
+      <h2 id="birthday-title">Indica tu fecha de nacimiento, {playerName.split(' ')[0]}</h2>
+      <p>Solo tendrás que indicarla una vez.</p>
+      <label htmlFor="birth-date"><CalendarDays size={18} /> Fecha de nacimiento</label>
       <input id="birth-date" type="date" min="1900-01-01" max={todayKey()} value={birthDate} onChange={(event) => { setBirthDate(event.target.value); setError(''); }} required autoFocus />
       {error && <div className="form-error" role="alert">{error}</div>}
-      <button className="button button--primary button--wide" type="submit" disabled={!birthDate || saving}><PartyPopper size={19} /> {saving ? 'Guardando…' : 'Guardar mi cumpleaños'}</button>
+      <button className="button button--primary button--wide" type="submit" disabled={!birthDate || saving}><PartyPopper size={19} /> {saving ? 'Guardando…' : 'Guardar fecha'}</button>
       <small>La fecha completa queda guardada de forma privada.</small>
     </form>
   </div>;

@@ -73,7 +73,7 @@ export class LocalDataService implements DataService {
 
   private getBirthdayState(auth: AuthSession): BirthdayState {
     const birthdays = readJson<Record<string, string>>(BIRTHDAYS_KEY, {});
-    const allPlayers = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active && !player.staffMember);
+    const allPlayers = readJson(PLAYERS_KEY, demoPlayers).filter((player) => player.active);
     const today = todayKey().slice(5);
     return {
       needsBirthDate: auth.role === 'player' && Boolean(auth.playerId) && !birthdays[auth.playerId!],

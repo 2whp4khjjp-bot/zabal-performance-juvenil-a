@@ -393,7 +393,6 @@ function getBirthdayState_(session) {
   values.slice(1).forEach(function(row) {
     if (!boolean_(row[activeColumn])) return;
     const name = String(row[nameColumn] || '');
-    if (isStaffName_(name)) return;
     const birthday = birthdayColumn >= 0 ? row[birthdayColumn] : '';
     if (birthdayMonthDay_(birthday) === todayMonthDay) birthdaysToday.push(name);
     if (session.role === 'player' && String(row[idColumn]) === String(session.playerId) && !birthday) needsBirthDate = true;
@@ -428,11 +427,9 @@ function saveBirthDate_(birthDate, session) {
       headers = values[0].map(String);
     }
     const idColumn = headers.indexOf('id');
-    const nameColumn = headers.indexOf('nombre');
     const activeColumn = headers.indexOf('activo');
     for (let index = 1; index < values.length; index += 1) {
       if (String(values[index][idColumn]) !== String(session.playerId) || !boolean_(values[index][activeColumn])) continue;
-      if (isStaffName_(values[index][nameColumn])) throw apiError_('Este perfil no necesita una fecha de cumpleaños.', 'FORBIDDEN');
       if (values[index][birthdayColumn]) throw apiError_('La fecha de cumpleaños ya está registrada.', 'BIRTHDATE_ALREADY_SET');
       const target = playersSheet.getRange(index + 1, birthdayColumn + 1);
       target.setNumberFormat('@');
