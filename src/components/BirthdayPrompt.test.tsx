@@ -7,10 +7,11 @@ describe('cumpleaños', () => {
     const onSave = vi.fn().mockResolvedValue(true);
     render(<BirthdayPrompt playerName="Adrián Vega" saving={false} onSave={onSave} />);
 
-    fireEvent.change(screen.getByLabelText('Fecha de cumpleaños'), { target: { value: '2008-08-20' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar mi cumpleaños' }));
+    fireEvent.change(screen.getByLabelText('Fecha de nacimiento'), { target: { value: '2008-08-20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar fecha' }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith('2008-08-20'));
+    expect(screen.queryByText(/felicitarte|plantilla verá/i)).toBeNull();
   });
 
   it('muestra solo los nombres en la felicitación compartida', () => {
