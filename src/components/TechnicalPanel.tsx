@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDownAZ, CalendarDays, Download, FileDown, Filter, Search, TrendingUp, UsersRound } from 'lucide-react';
+import { AlertTriangle, ArrowDownAZ, CalendarDays, Download, FileDown, Filter, Search, ShieldX, TrendingUp, UsersRound } from 'lucide-react';
 import type { AlertLevel, AttendanceRecord, MatchRecord, Measurement, Player, ReportKind } from '../types';
 import { todayKey } from '../utils/date';
 import { average, getAlertLevel, recentForPlayer, weightChange } from '../utils/measurements';
 import { exportCsv, exportExcel } from '../services/exports';
 import { generatePdfReport } from '../services/reports';
+import { generateTeamInjuriesPdf } from '../services/injuryReport';
 import { Sparkline } from './Sparkline';
 
 type SortKey = keyof Pick<Measurement, 'date' | 'time' | 'playerName' | 'weight' | 'fatigue' | 'soreness'> | 'status';
@@ -25,6 +26,7 @@ export function TechnicalPanel({ players, measurements, matches, attendance }: {
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
   const [individualId, setIndividualId] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [generatingInjuriesPdf, setGeneratingInjuriesPdf] = useState(false);
   const todayItems = measurements.filter((item) => item.date === todayKey());
   const registeredIds = new Set(todayItems.map((item) => item.playerId));
   const alerts = todayItems.filter((item) => getAlertLevel(item) === 'alert');
@@ -153,6 +155,7 @@ export function TechnicalPanel({ players, measurements, matches, attendance }: {
 
       <section className="report-strip">
         <div><CalendarDays /><span><strong>Informes listos para imprimir</strong><small>Dos jugadores por página A4 con sus gráficas semanales y mensuales.</small></span></div>
+        <button className="button button--secondary" disabled={generatingInjuriesPdf} onClick={() => { setGeneratingInjuriesPdf(true); void generateTeamInjuriesPdf(players).finally(() => setGeneratingInjuriesPdf(false)); }}><ShieldX size={18} /> {generatingInjuriesPdf ? 'Creando…' : 'Informe de bajas'}</button>
         <button className="button button--secondary" onClick={() => void pdf('alerts')}><FileDown size={18} /> Informe de alertas</button>
         <button className="button button--secondary" onClick={() => void pdf('weekly')}><FileDown size={18} /> Tendencias por jugador</button>
       </section>
