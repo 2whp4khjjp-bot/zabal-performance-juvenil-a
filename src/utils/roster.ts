@@ -1,4 +1,6 @@
 import type { Player } from '../types';
+import { todayKey } from './date';
+import { playerIsInjuredOn } from './injuries';
 
 const shirtNumbers: Array<[number, RegExp]> = [
   [1, /^álvaro torres$/i], [2, /^jairo muñoz$/i], [3, /^antonio torres$/i], [4, /^daren castro$/i],
@@ -9,8 +11,8 @@ const shirtNumbers: Array<[number, RegExp]> = [
   [23, /^pepe ruiz$/i], [24, /^francis pecino$/i], [25, /^álvaro cervera$/i], [26, /^lázaro gómez$/i],
 ];
 
-export const applyJuvenilRoster = (players: Player[]) => players.map((player) => {
+export const applyJuvenilRoster = (players: Player[], date = todayKey()) => players.map((player) => {
   const assigned = shirtNumbers.find(([, pattern]) => pattern.test(player.name.trim()))?.[0];
   const staffMember = player.staffMember || /\bCT\b|cuerpo t[ée]cnico|entrenador|preparador|fisio|delegado/i.test(player.name);
-  return { ...player, number: staffMember ? undefined : assigned ?? player.number, staffMember };
+  return { ...player, number: staffMember ? undefined : assigned ?? player.number, injured: playerIsInjuredOn(player, date), staffMember };
 }).sort((a, b) => Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number ?? 999) - (b.number ?? 999) || a.order - b.order);
