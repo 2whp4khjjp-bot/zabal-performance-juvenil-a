@@ -1,12 +1,9 @@
 import type { AttendanceRecord, Player } from '../types';
+import { playerIsInjuredOn } from './injuries';
 
 export type AttendancePeriod = 'week' | 'month' | 'season';
 
-export const playerIsInjuredOn = (player: Player, date: string) => {
-  const periods = player.injuries ?? [];
-  if (periods.length) return periods.some((period) => period.startDate <= date && (!period.endDate || period.endDate >= date));
-  return Boolean(player.injured);
-};
+export { playerIsInjuredOn } from './injuries';
 
 export const currentIsoWeek = (date = new Date()) => {
   const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));

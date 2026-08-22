@@ -1,6 +1,7 @@
 import { AlertTriangle, CalendarDays, CheckCircle2, CircleDashed, Search, ShieldAlert, XCircle } from 'lucide-react';
 import type { DashboardFilter, Measurement, Player } from '../types';
 import { formatDate, todayKey } from '../utils/date';
+import { playerIsInjuredOn } from '../utils/injuries';
 import { alertLabel, getAlertLevel } from '../utils/measurements';
 
 type PlayerGridProps = {
@@ -26,12 +27,14 @@ const statusIcon = {
 export function PlayerGrid({ players, measurements, selectedDate, onDateChange, onSelect, filter, onFilterChange, query, onQueryChange }: PlayerGridProps) {
   const today = todayKey();
   const measurementsByPlayer = new Map(measurements.filter((item) => item.date === selectedDate).map((item) => [item.playerId, item]));
-  const availablePlayers = players.filter((player) => !player.injured);
+  const injuredPlayerIds = new Set(players.filter((player) => playerIsInjuredOn(player, selectedDate)).map((player) => player.id));
+  const availablePlayers = players.filter((player) => !injuredPlayerIds.has(player.id));
   const registered = availablePlayers.filter((player) => measurementsByPlayer.has(player.id)).length;
   const pending = availablePlayers.length - registered;
   const filtered = players.filter((player) => {
     const hasMeasurement = measurementsByPlayer.has(player.id);
-    const matchesFilter = filter === 'all' || (filter === 'registered' ? hasMeasurement : !hasMeasurement && !player.injured);
+    const injuredOnSelectedDate = injuredPlayerIds.has(player.id);
+    const matchesFilter = filter === 'all' || (filter === 'registered' ? hasMeasurement : !hasMeasurement && !injuredOnSelectedDate);
     return matchesFilter && player.name.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es').trim());
   });
 
@@ -83,20 +86,21 @@ export function PlayerGrid({ players, measurements, selectedDate, onDateChange, 
             const measurement = measurementsByPlayer.get(player.id);
             const level = getAlertLevel(measurement);
             const Icon = statusIcon[level];
+            const injuredOnSelectedDate = injuredPlayerIds.has(player.id);
             return (
-              <article key={player.id} className={`player-card player-card--${level} ${player.injured ? 'player-card--injured' : ''} ${player.staffMember ? 'player-card--staff' : ''}`}>
+              <article key={player.id} className={`player-card player-card--${level} ${injuredOnSelectedDate ? 'player-card--injured' : ''} ${player.staffMember ? 'player-card--staff' : ''}`}>
                 <button
                   type="button"
                   data-testid={`player-${player.id}`}
                   className="player-card__main"
                   onClick={() => onSelect(player)}
-                  aria-label={`${player.name}, ${player.injured ? 'baja por lesión' : alertLabel[level]}`}
+                  aria-label={`${player.name}, ${injuredOnSelectedDate ? 'baja por lesión' : alertLabel[level]}`}
                 >
                   <span className="player-card__number">{player.staffMember ? 'CT' : player.number ?? '—'}</span>
                   <span className="player-card__body">
                     <strong>{player.name}</strong>
                     {player.staffMember && <span className="player-card__staff-label">Cuerpo técnico</span>}
-                    <span className="player-card__status">{player.injured ? <><XCircle size={17} /> Baja por lesión</> : <><Icon size={17} /> {alertLabel[level]}</>}</span>
+                    <span className="player-card__status">{injuredOnSelectedDate ? <><XCircle size={17} /> Baja por lesión</> : <><Icon size={17} /> {alertLabel[level]}</>}</span>
                   </span>
                   {measurement && <span className="player-card__values">F {measurement.fatigue ?? '—'} · M {measurement.soreness ?? '—'}</span>}
                 </button>

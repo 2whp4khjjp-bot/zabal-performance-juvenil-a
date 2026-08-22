@@ -2,6 +2,7 @@ import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
+import { playerIsInjuredOn } from '../utils/injuries';
 import { sanitizeComment } from '../utils/measurements';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
@@ -278,13 +279,15 @@ export class LocalDataService implements DataService {
     if (index < 0) throw new DataServiceError('Jugador no válido.', 'INVALID_PLAYER');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(injury.startDate) || (injury.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(injury.endDate) || injury.endDate < injury.startDate))) throw new DataServiceError('Revisa las fechas de la baja.', 'VALIDATION');
     const periods = [...(players[index].injuries ?? [])];
-    const activeIndex = periods.findIndex((period) => !period.endDate);
+    const today = todayKey();
+    const activeIndex = periods.findIndex((period) => period.startDate <= today && (!period.endDate || period.endDate >= today));
     const reason = injury.reason?.replace(/[<>]/g, '').trim().slice(0, 160) || periods[activeIndex]?.reason;
     if (!reason) throw new DataServiceError('Indica el motivo de la baja.', 'VALIDATION');
     const period = { id: activeIndex >= 0 ? periods[activeIndex].id : crypto.randomUUID(), startDate: injury.startDate, endDate: injury.endDate || undefined, reason };
     if (activeIndex >= 0) periods[activeIndex] = period;
     else periods.push(period);
-    players[index] = { ...players[index], injured: !injury.endDate, injuries: periods };
+    players[index] = { ...players[index], injuries: periods };
+    players[index].injured = playerIsInjuredOn(players[index], today);
     localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
     return players[index];
   }

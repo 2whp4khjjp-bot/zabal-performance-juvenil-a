@@ -1,6 +1,12 @@
 import type { InjuryPeriod, Player } from '../types';
 import { todayKey } from './date';
 
+export const playerIsInjuredOn = (player: Player, date: string) => {
+  const periods = player.injuries ?? [];
+  if (periods.length) return periods.some((period) => period.startDate <= date && (!period.endDate || period.endDate >= date));
+  return Boolean(player.injured);
+};
+
 const asDate = (value: string) => new Date(`${value}T12:00:00`);
 
 export const injuryPeriodDays = (period: InjuryPeriod, today = todayKey()) => {

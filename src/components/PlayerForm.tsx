@@ -4,7 +4,7 @@ import type { AuthRole, InjuryInput, MatchRecord, Measurement, MeasurementInput,
 import { formatDate, todayKey } from '../utils/date';
 import { average, parseWeight, recentForPlayer, weightChange } from '../utils/measurements';
 import { Sparkline } from './Sparkline';
-import { injuryPeriodDays, totalInjuryDays } from '../utils/injuries';
+import { injuryPeriodDays, playerIsInjuredOn, totalInjuryDays } from '../utils/injuries';
 
 type FormProps = {
   player: Player;
@@ -63,7 +63,9 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   const [draft, setDraft] = useState<Draft>(() => readDraft(player.id, todayKey(), existing));
   const [errors, setErrors] = useState<string[]>([]);
   const [showEvolution, setShowEvolution] = useState(false);
-  const activeInjury = player.injuries?.find((period) => !period.endDate);
+  const today = todayKey();
+  const activeInjury = player.injuries?.find((period) => period.startDate <= today && (!period.endDate || period.endDate >= today));
+  const injuredOnSelectedDate = playerIsInjuredOn(player, selectedDate);
   const [injuryStartDate, setInjuryStartDate] = useState(activeInjury?.startDate || todayKey());
   const [injuryEndDate, setInjuryEndDate] = useState('');
   const [injuryReason, setInjuryReason] = useState(activeInjury?.reason || '');
@@ -77,7 +79,8 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   }, [player.id, measurementDate]);
 
   useEffect(() => {
-    const active = player.injuries?.find((period) => !period.endDate);
+    const currentDate = todayKey();
+    const active = player.injuries?.find((period) => period.startDate <= currentDate && (!period.endDate || period.endDate >= currentDate));
     setInjuryStartDate(active?.startDate || todayKey());
     setInjuryEndDate('');
     setInjuryReason(active?.reason || '');
@@ -145,7 +148,7 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         {(player.injuries?.length ?? 0) > 0 && <div className="injury-history"><strong>Historial · {totalInjuryDays(player)} días de baja</strong>{player.injuries!.map((period) => <span key={period.id}>{formatDate(period.startDate)} → {period.endDate ? formatDate(period.endDate) : 'actualidad'} · {injuryPeriodDays(period)} días{period.reason ? ` · ${period.reason}` : ''}</span>)}</div>}
       </section>}
 
-      {player.injured ? <section className="injury-blocked-state injury-blocked-state--inline">
+      {injuredOnSelectedDate ? <section className="injury-blocked-state injury-blocked-state--inline">
         <ShieldX size={38} />
         <h2>Medición desactivada</h2>
         <p>{role === 'staff' ? 'Desmarca «Baja por lesión» para volver a introducir sus datos.' : 'El cuerpo técnico ha marcado al jugador como baja por lesión.'}</p>
