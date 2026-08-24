@@ -279,15 +279,17 @@ export class LocalDataService implements DataService {
     if (index < 0) throw new DataServiceError('Jugador no válido.', 'INVALID_PLAYER');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(injury.startDate) || (injury.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(injury.endDate) || injury.endDate < injury.startDate))) throw new DataServiceError('Revisa las fechas de la baja.', 'VALIDATION');
     const periods = [...(players[index].injuries ?? [])];
-    const today = todayKey();
-    const activeIndex = periods.findIndex((period) => period.startDate <= today && (!period.endDate || period.endDate >= today));
+    let activeIndex = injury.periodId ? periods.findIndex((period) => period.id === injury.periodId) : -1;
+    if (injury.periodId && activeIndex < 0) throw new DataServiceError('La baja que intentas editar ya no existe.', 'INVALID_INJURY');
+    if (activeIndex < 0) activeIndex = periods.findIndex((period) => !period.endDate);
+    if (activeIndex < 0 && injury.endDate && players[index].injured && periods.length) activeIndex = periods.length - 1;
     const reason = injury.reason?.replace(/[<>]/g, '').trim().slice(0, 160) || periods[activeIndex]?.reason;
     if (!reason) throw new DataServiceError('Indica el motivo de la baja.', 'VALIDATION');
     const period = { id: activeIndex >= 0 ? periods[activeIndex].id : crypto.randomUUID(), startDate: injury.startDate, endDate: injury.endDate || undefined, reason };
     if (activeIndex >= 0) periods[activeIndex] = period;
     else periods.push(period);
     players[index] = { ...players[index], injuries: periods };
-    players[index].injured = playerIsInjuredOn(players[index], today);
+    players[index].injured = periods.some((item) => !item.endDate);
     localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
     return players[index];
   }

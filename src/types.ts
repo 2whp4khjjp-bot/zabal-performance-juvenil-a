@@ -18,6 +18,7 @@ export type InjuryPeriod = {
 };
 
 export type InjuryInput = {
+  periodId?: string;
   startDate: string;
   endDate?: string;
   reason?: string;

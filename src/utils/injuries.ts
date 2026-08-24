@@ -2,6 +2,10 @@ import type { InjuryPeriod, Player } from '../types';
 import { todayKey } from './date';
 
 export const playerIsInjuredOn = (player: Player, date: string) => {
+  // El estado actual guardado por el cuerpo técnico es autoritativo. Así, al
+  // finalizar una baja hoy el jugador queda disponible inmediatamente, aunque
+  // ese día siga formando parte del intervalo histórico de la baja.
+  if (date === todayKey() && typeof player.injured === 'boolean') return player.injured;
   const periods = player.injuries ?? [];
   if (periods.length) return periods.some((period) => period.startDate <= date && (!period.endDate || period.endDate >= date));
   return Boolean(player.injured);

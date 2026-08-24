@@ -210,6 +210,11 @@ h1, h2, h3, .brand__name { font-family: 'Manrope', sans-serif; }
 .injury-date-error { grid-column: 1 / -1; margin: 0; color: #a4313d; font-size: .78rem; font-weight: 800; }
 .injury-history { grid-column: 1 / -1; padding: 11px 12px; border-radius: 9px; display: flex; flex-wrap: wrap; gap: 6px 14px; color: #6a7887; background: rgba(255,255,255,.7); font-size: .73rem; }
 .injury-history strong { width: 100%; color: var(--navy); }
+.injury-history__row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px; border: 1px solid transparent; border-radius: 8px; }
+.injury-history__row--editing { border-color: #e5b51d; background: #fff8da; }
+.injury-history__row > span { min-width: 0; }
+.injury-history__row button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid #c8d5e2; border-radius: 7px; color: var(--navy); background: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.injury-history__row button:disabled { opacity: .55; cursor: wait; }
 .switch-control { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .switch-control input { position: absolute; opacity: 0; pointer-events: none; }
 .switch-control > span { width: 44px; height: 25px; padding: 3px; border-radius: 14px; background: #bdc8d3; transition: background .18s; }

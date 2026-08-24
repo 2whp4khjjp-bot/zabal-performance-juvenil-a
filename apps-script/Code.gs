@@ -204,9 +204,11 @@ function getPlayers_(session) {
     const name = String(row.nombre);
     const staffMember = isStaffName_(name);
     const injuries = injuriesByPlayer[String(row.id)] || [];
-    const injured = injuries.length
-      ? injuries.some(function(period) { return period.startDate <= today && (!period.endDate || period.endDate >= today); })
-      : boolean_(row.baja_lesion);
+    // baja_lesion representa el estado actual y permite que un alta tenga
+    // efecto inmediato. Los periodos se conservan para consultas históricas.
+    const injured = Object.prototype.hasOwnProperty.call(row, 'baja_lesion')
+      ? boolean_(row.baja_lesion)
+      : injuries.some(function(period) { return period.startDate <= today && (!period.endDate || period.endDate >= today); });
     return { id: String(row.id), name: name, number: staffMember ? undefined : numberOrNull_(row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: injured, injuries: injuries, staffMember: staffMember };
   }).sort(function(a, b) { return Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number || 999) - (b.number || 999) || a.order - b.order; });
 }
@@ -242,7 +244,7 @@ function setPlayerInjury_(playerId, injury, session) {
     const playerName = String(values[index][headers.indexOf('nombre')]);
     const periods = getInjuryPeriods_().filter(function(period) { return period.playerId === String(playerId); });
     const today = dateKey_(new Date());
-    const active = periods.find(function(period) { return period.startDate <= today && (!period.endDate || period.endDate >= today); });
+    const active = periods.find(function(period) { return !period.endDate; });
     const legacy = Object.prototype.hasOwnProperty.call(injury || {}, 'injured');
     const startDate = legacy ? (active ? active.startDate : dateKey_(new Date())) : String(injury.startDate || '');
     const endDate = legacy ? (injury.injured ? '' : dateKey_(new Date())) : String(injury.endDate || '');
@@ -253,10 +255,26 @@ function setPlayerInjury_(playerId, injury, session) {
     const injuriesSheet = ensureInjuriesSheet_();
     const injuryValues = injuriesSheet.getDataRange().getValues();
     const injuryHeaders = injuryValues[0].map(String);
-    const activeIndex = injuryValues.slice(1).findIndex(function(row) {
+    const requestedPeriodId = String(injury.periodId || '');
+    let activeIndex = requestedPeriodId ? injuryValues.slice(1).findIndex(function(row) {
+      return String(row[injuryHeaders.indexOf('id')]) === requestedPeriodId && String(row[injuryHeaders.indexOf('jugador_id')]) === String(playerId);
+    }) : -1;
+    if (requestedPeriodId && activeIndex < 0) throw apiError_('La baja que intentas editar ya no existe.', 'INVALID_INJURY');
+    if (activeIndex < 0) activeIndex = injuryValues.slice(1).findIndex(function(row) {
       const rowEndDate = row[injuryHeaders.indexOf('fecha_fin')] ? dateKey_(row[injuryHeaders.indexOf('fecha_fin')]) : '';
-      return String(row[injuryHeaders.indexOf('jugador_id')]) === String(playerId) && (!rowEndDate || rowEndDate >= today);
+      return String(row[injuryHeaders.indexOf('jugador_id')]) === String(playerId) && !rowEndDate;
     });
+    // Compatibilidad con formularios anteriores: si la ficha aún figura de
+    // baja y se está guardando un alta, actualiza el último periodo en lugar
+    // de crear otra fila y duplicar el comentario.
+    if (activeIndex < 0 && endDate && boolean_(values[index][injuryColumn])) {
+      for (let rowIndex = injuryValues.length - 1; rowIndex >= 1; rowIndex -= 1) {
+        if (String(injuryValues[rowIndex][injuryHeaders.indexOf('jugador_id')]) === String(playerId)) {
+          activeIndex = rowIndex - 1;
+          break;
+        }
+      }
+    }
     const now = new Date();
     if (activeIndex >= 0) {
       const rowNumber = activeIndex + 2;
@@ -268,7 +286,8 @@ function setPlayerInjury_(playerId, injury, session) {
       const newPeriod = { id: Utilities.getUuid(), jugador_id: String(playerId), jugador_nombre: playerName, fecha_inicio: startDate, fecha_fin: endDate || '', motivo: reason, creado_en: now, actualizado_en: now };
       injuriesSheet.appendRow(injuryHeaders.map(function(header) { return newPeriod[header] === undefined ? '' : newPeriod[header]; }));
     }
-    playersSheet.getRange(index + 1, injuryColumn + 1).setValue(!endDate || endDate >= today);
+    const remainsInjured = getInjuryPeriods_().some(function(period) { return period.playerId === String(playerId) && !period.endDate; });
+    playersSheet.getRange(index + 1, injuryColumn + 1).setValue(remainsInjured);
     return getPlayers_({ role: 'staff' }).find(function(player) { return player.id === String(playerId); });
   }
   throw apiError_('Jugador no válido.', 'INVALID_PLAYER');

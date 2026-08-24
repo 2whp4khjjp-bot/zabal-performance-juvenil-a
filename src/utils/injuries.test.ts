@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { injuryPeriodDays, playerIsInjuredOn, totalInjuryDays } from './injuries';
+import { todayKey } from './date';
 
 describe('periodos de baja', () => {
   it('cuenta inicio y final y suma varios periodos', () => {
@@ -18,7 +19,16 @@ describe('periodos de baja', () => {
     expect(playerIsInjuredOn(player, '2026-08-19')).toBe(false);
     expect(playerIsInjuredOn(player, '2026-08-20')).toBe(true);
     expect(playerIsInjuredOn(player, '2026-08-22')).toBe(true);
-    expect(playerIsInjuredOn(player, '2026-08-24')).toBe(true);
+    expect(playerIsInjuredOn({ ...player, injured: undefined }, '2026-08-24')).toBe(true);
     expect(playerIsInjuredOn(player, '2026-08-25')).toBe(false);
+  });
+
+  it('hace efectiva inmediatamente un alta guardada hoy', () => {
+    const today = todayKey();
+    const player = { id: 'p', name: 'Jugador', active: true, order: 1, joinedAt: '2026-07-01', injured: false, injuries: [
+      { id: 'i1', startDate: '2026-08-01', endDate: today, reason: 'Alta médica' },
+    ] };
+
+    expect(playerIsInjuredOn(player, today)).toBe(false);
   });
 });

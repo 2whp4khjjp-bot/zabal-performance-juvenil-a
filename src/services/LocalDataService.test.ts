@@ -88,4 +88,19 @@ describe('servicio local', () => {
     expect(saved[0]).toMatchObject({ status: 'late', lateMinutes: 12 });
     expect(await service.getAttendance(staff.token)).toHaveLength(2);
   });
+
+  it('finaliza y edita una baja sin duplicar su historial', async () => {
+    const service = new LocalDataService();
+    const { auth: staff } = await service.authenticate('2026', 'staff');
+    const player = (await service.getPlayers(staff.token))[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const opened = await service.setPlayerInjury(staff.token, player.id, { startDate: today, reason: 'Molestia inicial' });
+    const periodId = opened.injuries?.[0].id;
+
+    const closed = await service.setPlayerInjury(staff.token, player.id, { periodId, startDate: today, endDate: today, reason: 'Diagnóstico corregido' });
+
+    expect(closed.injured).toBe(false);
+    expect(closed.injuries).toHaveLength(1);
+    expect(closed.injuries?.[0]).toMatchObject({ id: periodId, endDate: today, reason: 'Diagnóstico corregido' });
+  });
 });
