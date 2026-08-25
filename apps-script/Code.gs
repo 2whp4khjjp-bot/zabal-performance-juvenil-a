@@ -320,13 +320,32 @@ function ensureAttendanceSheet_() {
 function getAttendance_(session) {
   requireStaff_(session);
   ensureAttendanceSheet_();
-  return rows_(SHEETS.ATTENDANCE).map(function(row) {
+  const attendance = rows_(SHEETS.ATTENDANCE).map(function(row) {
     return {
       id: String(row.id), date: dateKey_(row.fecha), playerId: String(row.jugador_id), playerName: String(row.jugador_nombre),
       status: String(row.estado || 'pending'), lateMinutes: Number(row.minutos_retraso || 0), comments: String(row.comentarios || ''),
       createdAt: iso_(row.creado_en), updatedAt: iso_(row.actualizado_en), createdBy: String(row.creado_por || 'cuerpo-tecnico'),
     };
-  }).sort(function(a, b) { return (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt); });
+  });
+  const byPlayerAndDate = {};
+  attendance.forEach(function(record) { byPlayerAndDate[record.date + '|' + record.playerId] = record; });
+  getMeasurements_({ role: 'staff' }).forEach(function(measurement) {
+    const key = measurement.date + '|' + measurement.playerId;
+    const previous = byPlayerAndDate[key];
+    byPlayerAndDate[key] = {
+      id: previous ? previous.id : 'measurement-' + measurement.id,
+      date: measurement.date,
+      playerId: measurement.playerId,
+      playerName: measurement.playerName,
+      status: 'present',
+      lateMinutes: 0,
+      comments: previous ? previous.comments : 'Presencia registrada automáticamente mediante medición',
+      createdAt: previous ? previous.createdAt : measurement.createdAt,
+      updatedAt: measurement.updatedAt,
+      createdBy: measurement.createdBy,
+    };
+  });
+  return Object.keys(byPlayerAndDate).map(function(key) { return byPlayerAndDate[key]; }).sort(function(a, b) { return (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt); });
 }
 
 function saveAttendance_(input, session) {
@@ -377,6 +396,37 @@ function saveAttendance_(input, session) {
     attendanceSheet.getRange(attendanceSheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
     return rows.map(function(row) { return { id: String(row[0]), date: date, playerId: String(row[2]), playerName: String(row[3]), status: String(row[4]), lateMinutes: Number(row[5] || 0), comments: String(row[6] || ''), createdAt: iso_(row[7]), updatedAt: iso_(row[8]), createdBy: String(row[9]) }; });
   } finally { lock.releaseLock(); }
+}
+
+function markAttendancePresentFromMeasurement_(date, player, now, createdBy) {
+  const attendanceSheet = ensureAttendanceSheet_();
+  const values = attendanceSheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const dateColumn = headers.indexOf('fecha');
+  const playerColumn = headers.indexOf('jugador_id');
+  let rowNumber = -1;
+  for (let index = 1; index < values.length; index += 1) {
+    if (dateKey_(values[index][dateColumn]) === date && String(values[index][playerColumn]) === String(player.id)) {
+      rowNumber = index + 1;
+      break;
+    }
+  }
+  const previous = rowNumber > 0 ? values[rowNumber - 1] : [];
+  const record = {
+    id: rowNumber > 0 ? String(previous[headers.indexOf('id')]) : Utilities.getUuid(),
+    fecha: date,
+    jugador_id: String(player.id),
+    jugador_nombre: String(player.name),
+    estado: 'present',
+    minutos_retraso: 0,
+    comentarios: rowNumber > 0 ? String(previous[headers.indexOf('comentarios')] || '') : 'Presencia registrada automáticamente mediante medición',
+    creado_en: rowNumber > 0 ? previous[headers.indexOf('creado_en')] : now,
+    actualizado_en: now,
+    creado_por: createdBy || 'medicion',
+  };
+  const row = headers.map(function(header) { return record[header] === undefined ? '' : record[header]; });
+  if (rowNumber > 0) attendanceSheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+  else attendanceSheet.appendRow(row);
 }
 
 function getBootstrap_(session) {
@@ -709,6 +759,7 @@ function saveMeasurement_(input, session) {
     const row = [id, requestedDate, Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm'), previousCreated, player.id, player.name, blankIfUndefined_(mergedWeight), blankIfUndefined_(mergedFatigue), blankIfUndefined_(mergedSoreness), comments, String(input.sessionId || ''), createdBy, now];
     if (rowIndex > 0) sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
     else sheet.appendRow(row);
+    markAttendancePresentFromMeasurement_(requestedDate, player, now, createdBy);
     return { id: id, date: requestedDate, time: row[2], createdAt: iso_(previousCreated), playerId: player.id, playerName: player.name, weight: mergedWeight, fatigue: mergedFatigue, soreness: mergedSoreness, comments: comments, sessionId: String(input.sessionId || ''), createdBy: createdBy, updatedAt: now.toISOString() };
   } finally {
     lock.releaseLock();
