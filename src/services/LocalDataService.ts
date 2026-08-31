@@ -1,6 +1,6 @@
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { playerIsInjuredOn } from '../utils/injuries';
 import { sanitizeComment } from '../utils/measurements';
@@ -12,6 +12,7 @@ const PLAYERS_KEY = 'zabal-demo-players-v1';
 const MATCHES_KEY = 'zabal-demo-matches-v1';
 const ATTENDANCE_KEY = 'zabal-demo-attendance-v1';
 const BIRTHDAYS_KEY = 'zabal-demo-birthdays-v1';
+const EMAILS_KEY = 'zabal-demo-emails-v1';
 
 const sha256 = async (value: string) => {
   const bytes = new TextEncoder().encode(value);
@@ -69,7 +70,8 @@ export class LocalDataService implements DataService {
       this.getPlayers(token), this.getMeasurements(token), this.getCurrentSession(token),
     ]);
     const birthdayState = this.getBirthdayState(auth);
-    return { players, measurements, session, ...birthdayState };
+    const emailState = this.getEmailState(auth);
+    return { players, measurements, session, ...birthdayState, ...emailState };
   }
 
   private getBirthdayState(auth: AuthSession): BirthdayState {
@@ -95,6 +97,27 @@ export class LocalDataService implements DataService {
     birthdays[auth.playerId] = clean;
     localStorage.setItem(BIRTHDAYS_KEY, JSON.stringify(birthdays));
     return this.getBirthdayState(auth);
+  }
+
+  private getEmailState(auth: AuthSession): EmailState {
+    const emails = readJson<Record<string, string>>(EMAILS_KEY, {});
+    return {
+      needsEmail: auth.role === 'player' && Boolean(auth.playerId) && !emails[auth.playerId!],
+    };
+  }
+
+  async saveEmail(token: string, email: string): Promise<EmailState> {
+    const auth = this.requireSession(token);
+    if (auth.role !== 'player' || !auth.playerId) throw new DataServiceError('Solo el jugador puede registrar su correo electrónico.', 'FORBIDDEN');
+    const clean = String(email || '').trim().toLowerCase();
+    if (clean.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean)) {
+      throw new DataServiceError('Introduce un correo electrónico válido.', 'VALIDATION');
+    }
+    const emails = readJson<Record<string, string>>(EMAILS_KEY, {});
+    if (emails[auth.playerId]) throw new DataServiceError('El correo electrónico ya está registrado.', 'EMAIL_ALREADY_SET');
+    emails[auth.playerId] = clean;
+    localStorage.setItem(EMAILS_KEY, JSON.stringify(emails));
+    return this.getEmailState(auth);
   }
 
   async getPlayers(token: string): Promise<Player[]> {

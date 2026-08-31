@@ -17,9 +17,9 @@ export function BirthdayPrompt({ playerName, saving, onSave }: { playerName: str
     await onSave(birthDate);
   };
 
-  return <div className="birthday-modal" role="dialog" aria-modal="true" aria-labelledby="birthday-title">
-    <form className="birthday-card" onSubmit={(event) => void submit(event)}>
-      <div className="birthday-card__icon"><CakeSlice size={30} /></div>
+  return <div className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="birthday-title">
+    <form className="profile-card" onSubmit={(event) => void submit(event)}>
+      <div className="profile-card__icon"><CakeSlice size={30} /></div>
       <p className="eyebrow eyebrow--dark">Completa tu perfil</p>
       <h2 id="birthday-title">Indica tu fecha de nacimiento, {playerName.split(' ')[0]}</h2>
       <p>Solo tendrás que indicarla una vez.</p>

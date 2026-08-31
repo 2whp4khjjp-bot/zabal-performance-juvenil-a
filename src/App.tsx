@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, EmailState, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -11,6 +11,7 @@ import { Toast } from './components/Toast';
 import { SiteFooter } from './components/SiteFooter';
 import { PageNavigation } from './components/PageNavigation';
 import { BirthdayBanner, BirthdayPrompt } from './components/BirthdayPrompt';
+import { EmailPrompt } from './components/EmailPrompt';
 import { environment } from './config';
 import { todayKey } from './utils/date';
 import { applyJuvenilRoster } from './utils/roster';
@@ -78,6 +79,7 @@ export default function App() {
   const [offline, setOffline] = useState(!navigator.onLine);
   const [hydratedToken, setHydratedToken] = useState('');
   const [birthdayState, setBirthdayState] = useState<BirthdayState>({ needsBirthDate: false, birthdaysToday: [] });
+  const [emailState, setEmailState] = useState<EmailState>({ needsEmail: false });
   const [birthdayNoticeOpen, setBirthdayNoticeOpen] = useState(false);
 
   const applyBirthdayState = (bootstrap: BootstrapData) => {
@@ -86,6 +88,7 @@ export default function App() {
       birthdaysToday: Array.isArray(bootstrap.birthdaysToday) ? bootstrap.birthdaysToday : [],
     };
     setBirthdayState(next);
+    setEmailState({ needsEmail: Boolean(bootstrap.needsEmail) });
     setBirthdayNoticeOpen(next.birthdaysToday.length > 0);
   };
 
@@ -100,6 +103,7 @@ export default function App() {
     setAttendance([]);
     setAttendanceLoaded(false);
     setBirthdayState({ needsBirthDate: false, birthdaysToday: [] });
+    setEmailState({ needsEmail: false });
     setBirthdayNoticeOpen(false);
     setHydratedToken('');
     setSelectedPlayer(null);
@@ -292,6 +296,23 @@ export default function App() {
     }
   };
 
+  const saveEmail = async (email: string) => {
+    if (!auth || auth.role !== 'player') return false;
+    setSaving(true);
+    setError('');
+    try {
+      const next = await dataService.saveEmail(auth.token, email);
+      setEmailState(next);
+      setToast('Correo guardado correctamente');
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo guardar el correo electrónico.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveMatch = async (input: MatchInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true);
@@ -407,6 +428,7 @@ export default function App() {
       </Suspense>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       {auth.role === 'player' && birthdayState.needsBirthDate && <BirthdayPrompt playerName={auth.playerName || 'jugador'} saving={saving} onSave={saveBirthDate} />}
+      {auth.role === 'player' && !birthdayState.needsBirthDate && emailState.needsEmail && <EmailPrompt playerName={auth.playerName || 'jugador'} saving={saving} onSave={saveEmail} />}
       <SiteFooter />
     </div>
   );

@@ -42,6 +42,27 @@ describe('servicio local', () => {
     expect(staffBootstrap?.birthdaysToday).toEqual(['Adrián Vega']);
     expect(staffBootstrap).not.toHaveProperty('birthDate');
   });
+  it('pide el correo a todos los jugadores, lo normaliza y solo permite guardarlo una vez', async () => {
+    const service = new LocalDataService();
+    const { auth, bootstrap } = await service.authenticate('1001', 'player');
+    expect(bootstrap?.needsEmail).toBe(true);
+
+    const saved = await service.saveEmail(auth.token, '  ADRIAN@EJEMPLO.COM ');
+    expect(saved).toEqual({ needsEmail: false });
+    await expect(service.saveEmail(auth.token, 'otro@ejemplo.com')).rejects.toThrow('ya está registrado');
+
+    const { bootstrap: nextBootstrap } = await service.authenticate('1001', 'player');
+    expect(nextBootstrap?.needsEmail).toBe(false);
+    expect(nextBootstrap).not.toHaveProperty('email');
+  });
+  it('rechaza correos no válidos y no permite al cuerpo técnico registrarlos', async () => {
+    const service = new LocalDataService();
+    const { auth: player } = await service.authenticate('1001', 'player');
+    await expect(service.saveEmail(player.token, 'correo-invalido')).rejects.toThrow('válido');
+
+    const { auth: staff } = await service.authenticate('2026', 'staff');
+    await expect(service.saveEmail(staff.token, 'staff@ejemplo.com')).rejects.toThrow('Solo el jugador');
+  });
   it('guarda minutos de partido solo para el cuerpo técnico', async () => {
     const service = new LocalDataService();
     const { auth: staff } = await service.authenticate('2026', 'staff');

@@ -116,12 +116,17 @@ export type BootstrapData = {
   measurements: Measurement[];
   session: TrainingSession;
   needsBirthDate?: boolean;
+  needsEmail?: boolean;
   birthdaysToday?: string[];
 };
 
 export type BirthdayState = {
   needsBirthDate: boolean;
   birthdaysToday: string[];
+};
+
+export type EmailState = {
+  needsEmail: boolean;
 };
 
 export type LoginResult = {

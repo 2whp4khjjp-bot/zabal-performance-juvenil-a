@@ -120,6 +120,29 @@ En **Panel técnico**:
 
 Los PDF se generan en el navegador con tablas A4; no necesitan abrir Google Sheets.
 
+## Informes semanales privados para jugadores
+
+Cuando un jugador ha registrado su correo electrónico, Apps Script puede enviarle cada lunes un informe correspondiente a la semana anterior. El correo es individual: solo incluye los datos asociados al identificador de ese jugador y no reutiliza el informe del cuerpo técnico.
+
+El informe contiene:
+
+- Controles diarios de peso, fatiga, molestias y comentarios.
+- Medias, máximos y evolución frente a las cuatro semanas anteriores.
+- Resumen de asistencia, retrasos y ausencias.
+- Convocatorias, titularidades, minutos, goles y tarjetas.
+- Un análisis automático personal con los umbrales configurados en la hoja.
+
+Para activarlo después de actualizar y autorizar Apps Script:
+
+1. Ejecute **Zabal Performance > Preparar estructura** para añadir la configuración necesaria.
+2. Compruebe que los jugadores han completado `correo_electronico` en su ficha mediante la aplicación.
+3. Pulse **Zabal Performance > Activar correos semanales** y confirme la autorización solicitada por Google.
+4. El envío se ejecutará los lunes entre las 08:00 y las 09:00, usando la zona horaria `Europe/Madrid`.
+
+El proceso registra internamente qué jugadores han recibido cada periodo para impedir correos duplicados si el disparador se repite. Puede detenerse desde **Zabal Performance > Desactivar correos semanales**.
+
+El contenido es orientativo y no constituye una valoración médica. Antes de activarlo con jugadores menores de edad, el club debe definir la base jurídica, información a familias/jugadores, consentimiento cuando proceda, retención y canal para ejercer derechos de protección de datos.
+
 ## Despliegue y subdominio
 
 La configuración recomendada para este proyecto es GitHub Pages mediante el flujo incluido en `.github/workflows/deploy-pages.yml`. Consulte la guía paso a paso en `docs/DESPLIEGUE_GITHUB.md`.

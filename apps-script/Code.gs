@@ -16,7 +16,7 @@ const SHEETS = {
 const MAX_STARTERS = 11; // Cambiar a 7 al desplegar una categoría de fútbol 7.
 
 const HEADERS = {
-  Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash', 'baja_lesion', 'fecha_nacimiento'],
+  Jugadores: ['id', 'nombre', 'dorsal', 'activo', 'orden', 'fecha_alta', 'pin_hash', 'baja_lesion', 'fecha_nacimiento', 'correo_electronico'],
   Mediciones: ['id', 'fecha', 'hora', 'fecha_hora', 'jugador_id', 'jugador_nombre', 'peso', 'fatiga', 'molestias', 'comentarios', 'sesion_id', 'creado_por', 'actualizado_en'],
   Sesiones: ['id', 'fecha', 'tipo_sesion', 'rival', 'jornada', 'activa', 'hora_apertura', 'hora_cierre'],
   Configuración: ['clave', 'valor'],
@@ -33,6 +33,9 @@ function onOpen() {
     .addItem('Configurar PIN del cuerpo técnico', 'configurePinFromUi')
     .addItem('Generar PINs de jugadores', 'generatePlayerPinsFromUi')
     .addItem('Aplicar PINs editados', 'applyPlayerPinsFromUi')
+    .addSeparator()
+    .addItem('Activar correos semanales', 'enableWeeklyPlayerEmailsFromUi')
+    .addItem('Desactivar correos semanales', 'disableWeeklyPlayerEmailsFromUi')
     .addToUi();
 }
 
@@ -68,7 +71,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 5 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 7 } });
 }
 
 function doPost(event) {
@@ -91,6 +94,7 @@ function doPost(event) {
     if (action === 'saveAttendance') return json_({ ok: true, data: saveAttendance_(input.attendance, session) });
     if (action === 'setPlayerInjury') return json_({ ok: true, data: setPlayerInjury_(input.playerId, input.injury || { injured: input.injured }, session) });
     if (action === 'saveBirthDate') return json_({ ok: true, data: saveBirthDate_(input.birthDate, session) });
+    if (action === 'saveEmail') return json_({ ok: true, data: saveEmail_(input.email, session) });
     throw apiError_('Acción no permitida.', 'INVALID_ACTION');
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -111,6 +115,8 @@ function setupProject() {
   ensureConfig_('molestias_moderada_desde', '4');
   ensureConfig_('molestias_alerta_desde', '7');
   ensureConfig_('duracion_partido_minutos', '90');
+  ensureConfig_('cambio_peso_relevante_kg', '1.5');
+  ensureConfig_('correos_semanales_jugadores', 'FALSE');
   ensureAuthSecret_();
   ensureStaffMember_('Luis Lara CT');
   return 'Estructura actualizada. Configura el PIN técnico y genera los PINs de jugadores desde el menú Zabal Performance.';
@@ -166,11 +172,13 @@ function authenticate_(pin, requestedRole, includeBootstrap) {
 
 function getLoginBootstrap_(session) {
   const birthdayState = getBirthdayState_(session);
+  const emailState = getEmailState_(session);
   return {
     players: getPlayers_(session),
     measurements: session.role === 'player' ? getMeasurements_(session) : [],
     session: getCurrentSession_(),
     needsBirthDate: birthdayState.needsBirthDate,
+    needsEmail: emailState.needsEmail,
     birthdaysToday: birthdayState.birthdaysToday,
   };
 }
@@ -337,8 +345,8 @@ function getAttendance_(session) {
       date: measurement.date,
       playerId: measurement.playerId,
       playerName: measurement.playerName,
-      status: 'present',
-      lateMinutes: 0,
+      status: previous ? previous.status : 'present',
+      lateMinutes: previous ? previous.lateMinutes : 0,
       comments: previous ? previous.comments : 'Presencia registrada automáticamente mediante medición',
       createdAt: previous ? previous.createdAt : measurement.createdAt,
       updatedAt: measurement.updatedAt,
@@ -431,6 +439,7 @@ function markAttendancePresentFromMeasurement_(date, player, now, createdBy) {
 
 function getBootstrap_(session) {
   const birthdayState = getBirthdayState_(session);
+  const emailState = getEmailState_(session);
   return {
     players: getPlayers_(session),
     // El histórico completo puede crecer mucho y no debe bloquear la entrada
@@ -438,6 +447,7 @@ function getBootstrap_(session) {
     measurements: session.role === 'player' ? getMeasurements_(session) : [],
     session: getCurrentSession_(),
     needsBirthDate: birthdayState.needsBirthDate,
+    needsEmail: emailState.needsEmail,
     birthdaysToday: birthdayState.birthdaysToday,
   };
 }
@@ -515,6 +525,460 @@ function saveBirthDate_(birthDate, session) {
     }
     throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
   } finally { lock.releaseLock(); }
+}
+
+function getEmailState_(session) {
+  if (!session || session.role !== 'player' || !session.playerId) return { needsEmail: false };
+  const playersSheet = sheet_(SHEETS.PLAYERS);
+  const values = playersSheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const idColumn = headers.indexOf('id');
+  const activeColumn = headers.indexOf('activo');
+  const emailColumn = headers.indexOf('correo_electronico');
+  const player = values.slice(1).find(function(row) {
+    return boolean_(row[activeColumn]) && String(row[idColumn]) === String(session.playerId);
+  });
+  return { needsEmail: Boolean(player) && (emailColumn < 0 || !String(player[emailColumn] || '').trim()) };
+}
+
+function saveEmail_(email, session) {
+  if (!session || session.role !== 'player' || !session.playerId) throw apiError_('Solo el jugador puede registrar su correo electrónico.', 'FORBIDDEN');
+  const clean = String(email || '').trim().toLowerCase();
+  if (!isValidEmail_(clean)) {
+    throw apiError_('Introduce un correo electrónico válido.', 'VALIDATION');
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo en unos segundos.', 'BUSY');
+  try {
+    const playersSheet = sheet_(SHEETS.PLAYERS);
+    let values = playersSheet.getDataRange().getValues();
+    let headers = values[0].map(String);
+    let emailColumn = headers.indexOf('correo_electronico');
+    if (emailColumn < 0) {
+      emailColumn = headers.length;
+      playersSheet.getRange(1, emailColumn + 1).setValue('correo_electronico');
+      values = playersSheet.getDataRange().getValues();
+      headers = values[0].map(String);
+    }
+    const idColumn = headers.indexOf('id');
+    const activeColumn = headers.indexOf('activo');
+    for (let index = 1; index < values.length; index += 1) {
+      if (String(values[index][idColumn]) !== String(session.playerId) || !boolean_(values[index][activeColumn])) continue;
+      if (String(values[index][emailColumn] || '').trim()) throw apiError_('El correo electrónico ya está registrado.', 'EMAIL_ALREADY_SET');
+      const target = playersSheet.getRange(index + 1, emailColumn + 1);
+      target.setNumberFormat('@');
+      target.setValue(clean);
+      return { needsEmail: false };
+    }
+    throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
+  } finally { lock.releaseLock(); }
+}
+
+function enableWeeklyPlayerEmailsFromUi() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'Activar informes semanales privados',
+    'Cada lunes por la mañana se enviará a cada jugador con correo registrado un informe que contiene únicamente sus propios datos de rendimiento, asistencia y partidos de la semana anterior. ¿Quieres activarlo?',
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+  // Fuerza la autorización del servicio de correo durante la activación,
+  // evitando que el primer disparador semanal falle por falta de permisos.
+  MailApp.getRemainingDailyQuota();
+  installWeeklyPlayerEmailTrigger_();
+  ui.alert('Correos semanales activados', 'El primer envío automático se realizará el próximo lunes entre las 08:00 y las 09:00, hora de Madrid.', ui.ButtonSet.OK);
+}
+
+function disableWeeklyPlayerEmailsFromUi() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert('Desactivar correos semanales', '¿Quieres detener los informes semanales de todos los jugadores?', ui.ButtonSet.YES_NO);
+  if (response !== ui.Button.YES) return;
+  deleteWeeklyPlayerEmailTriggers_();
+  setConfig_('correos_semanales_jugadores', 'FALSE');
+  ui.alert('Los correos semanales han quedado desactivados.');
+}
+
+function installWeeklyPlayerEmailTrigger_() {
+  deleteWeeklyPlayerEmailTriggers_();
+  ScriptApp.newTrigger('sendWeeklyPlayerReports')
+    .timeBased()
+    .everyWeeks(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(8)
+    .create();
+  setConfig_('correos_semanales_jugadores', 'TRUE');
+}
+
+function deleteWeeklyPlayerEmailTriggers_() {
+  let deleted = 0;
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() !== 'sendWeeklyPlayerReports') return;
+    ScriptApp.deleteTrigger(trigger);
+    deleted += 1;
+  });
+  return deleted;
+}
+
+function sendWeeklyPlayerReports() {
+  if (String(getConfigValue_('correos_semanales_jugadores', 'FALSE')).toUpperCase() !== 'TRUE') {
+    return { sent: 0, skipped: 0, failed: 0, inactive: true };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { sent: 0, skipped: 0, failed: 0, busy: true };
+  try {
+    const range = previousWeekRange_(new Date());
+    const players = weeklyEmailPlayers_();
+    const measurements = getMeasurements_({ role: 'staff' });
+    const attendance = getAttendance_({ role: 'staff' });
+    const matches = getMatches_({ role: 'staff' });
+    const thresholds = weeklyAnalysisThresholds_();
+    const properties = PropertiesService.getScriptProperties();
+    const sentProperty = 'WEEKLY_PLAYER_REPORT_SENT_' + range.endKey;
+    const sentPlayerIds = parseStringList_(properties.getProperty(sentProperty));
+    let remainingQuota = MailApp.getRemainingDailyQuota();
+    const result = { sent: 0, skipped: 0, failed: 0, periodStart: range.startKey, periodEnd: range.endKey };
+
+    players.forEach(function(player) {
+      if (sentPlayerIds.indexOf(player.id) >= 0 || remainingQuota < 1) {
+        result.skipped += 1;
+        return;
+      }
+      try {
+        const report = buildWeeklyPlayerReport_(player, range, measurements, attendance, matches, thresholds);
+        MailApp.sendEmail({
+          to: player.email,
+          subject: 'Tu informe semanal · ' + report.periodLabel,
+          body: report.plainText,
+          htmlBody: report.html,
+          name: 'Zabal Performance',
+        });
+        sentPlayerIds.push(player.id);
+        properties.setProperty(sentProperty, JSON.stringify(sentPlayerIds));
+        remainingQuota -= 1;
+        result.sent += 1;
+      } catch (error) {
+        result.failed += 1;
+        console.error('No se pudo enviar el informe semanal de ' + player.id + ': ' + (error && error.message ? error.message : String(error)));
+      }
+    });
+    return result;
+  } finally { lock.releaseLock(); }
+}
+
+function weeklyEmailPlayers_() {
+  return rows_(SHEETS.PLAYERS).filter(function(row) {
+    return boolean_(row.activo) && !isStaffName_(row.nombre) && isValidEmail_(row.correo_electronico);
+  }).map(function(row) {
+    return { id: String(row.id), name: String(row.nombre), email: String(row.correo_electronico).trim().toLowerCase() };
+  });
+}
+
+function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance, allMatches, thresholds) {
+  const measurements = allMeasurements.filter(function(item) {
+    return item.playerId === player.id && item.date >= range.startKey && item.date <= range.endKey;
+  }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+  const comparisonStart = shiftDateKey_(range.startKey, -28);
+  const previousMeasurements = allMeasurements.filter(function(item) {
+    return item.playerId === player.id && item.date >= comparisonStart && item.date < range.startKey;
+  }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+  const playerAttendance = allAttendance.filter(function(item) {
+    return item.playerId === player.id && item.date >= range.startKey && item.date <= range.endKey;
+  }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+  const playerMatches = allMatches.filter(function(match) {
+    return match.date >= range.startKey && match.date <= range.endKey && match.minutes.some(function(entry) { return entry.playerId === player.id; });
+  }).map(function(match) {
+    const entry = match.minutes.find(function(item) { return item.playerId === player.id; });
+    return {
+      date: match.date,
+      opponent: match.opponent,
+      type: match.type,
+      calledUp: Boolean(entry && entry.calledUp),
+      starter: Boolean(entry && entry.starter),
+      minutes: entry ? Number(entry.minutes || 0) : 0,
+      goals: entry ? Number(entry.goals || 0) : 0,
+      yellowCards: entry ? Number(entry.yellowCards || 0) : 0,
+      redCards: entry ? Number(entry.redCards || 0) : 0,
+    };
+  }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+
+  const fatigueValues = numericValues_(measurements, 'fatigue');
+  const sorenessValues = numericValues_(measurements, 'soreness');
+  const previousFatigueValues = numericValues_(previousMeasurements, 'fatigue');
+  const previousSorenessValues = numericValues_(previousMeasurements, 'soreness');
+  const weightValues = measurements.filter(function(item) { return hasValue_(item.weight); });
+  const previousWeightValues = previousMeasurements.filter(function(item) { return hasValue_(item.weight); });
+  const latestWeight = weightValues.length ? Number(weightValues[weightValues.length - 1].weight) : undefined;
+  const weightReference = previousWeightValues.length
+    ? Number(previousWeightValues[previousWeightValues.length - 1].weight)
+    : weightValues.length > 1 ? Number(weightValues[0].weight) : undefined;
+  const weightChange = hasValue_(latestWeight) && hasValue_(weightReference) ? latestWeight - weightReference : undefined;
+  const attendanceCounts = countBy_(playerAttendance, 'status');
+  const matchTotals = playerMatches.reduce(function(total, match) {
+    total.calledUp += Number(match.calledUp);
+    total.starts += Number(match.starter);
+    total.minutes += match.minutes;
+    total.goals += match.goals;
+    total.yellowCards += match.yellowCards;
+    total.redCards += match.redCards;
+    return total;
+  }, { calledUp: 0, starts: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 });
+  const metrics = {
+    controls: measurements.length,
+    fatigueAverage: average_(fatigueValues),
+    fatigueMax: maximum_(fatigueValues),
+    previousFatigueAverage: average_(previousFatigueValues),
+    sorenessAverage: average_(sorenessValues),
+    sorenessMax: maximum_(sorenessValues),
+    previousSorenessAverage: average_(previousSorenessValues),
+    latestWeight: latestWeight,
+    weightChange: weightChange,
+  };
+  const analysis = weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, thresholds);
+  const periodLabel = weeklyPeriodLabel_(range.startKey, range.endKey);
+  return {
+    periodLabel: periodLabel,
+    plainText: weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, analysis),
+    html: weeklyPlayerHtml_(player, periodLabel, measurements, playerAttendance, playerMatches, metrics, attendanceCounts, matchTotals, analysis),
+  };
+}
+
+function weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, thresholds) {
+  const analysis = [];
+  const moderateFrom = thresholds.fatigueModerate;
+  const alertFrom = thresholds.fatigueAlert;
+  const sorenessModerateFrom = thresholds.sorenessModerate;
+  const sorenessAlertFrom = thresholds.sorenessAlert;
+  const relevantWeightChange = thresholds.relevantWeightChange;
+
+  if (!metrics.controls) {
+    analysis.push('No hay controles registrados durante esta semana. Registrar tus datos con regularidad permite interpretar mejor la evolución.');
+  } else {
+    analysis.push('Has completado ' + metrics.controls + (metrics.controls === 1 ? ' control esta semana.' : ' controles esta semana.'));
+  }
+  if (hasValue_(metrics.fatigueAverage)) {
+    if (metrics.fatigueAverage >= alertFrom) analysis.push('Tu fatiga media ha estado en una zona alta. Coméntalo con el cuerpo técnico para contextualizar la carga y la recuperación.');
+    else if (metrics.fatigueAverage >= moderateFrom) analysis.push('Tu fatiga media ha sido moderada. Conviene observar cómo evoluciona en los próximos controles.');
+    else analysis.push('La fatiga registrada se ha mantenido en una zona baja.');
+    if (hasValue_(metrics.previousFatigueAverage) && metrics.fatigueAverage - metrics.previousFatigueAverage >= 1) analysis.push('La fatiga media ha subido al menos un punto respecto a tus cuatro semanas anteriores.');
+    if (hasValue_(metrics.previousFatigueAverage) && metrics.previousFatigueAverage - metrics.fatigueAverage >= 1) analysis.push('La fatiga media ha bajado al menos un punto respecto a tus cuatro semanas anteriores.');
+  }
+  if (hasValue_(metrics.sorenessAverage)) {
+    if (metrics.sorenessAverage >= sorenessAlertFrom) analysis.push('Las molestias registradas han estado en una zona alta. Informa al cuerpo técnico si continúan o aumentan.');
+    else if (metrics.sorenessAverage >= sorenessModerateFrom) analysis.push('Las molestias han sido moderadas; sigue registrándolas para comprobar su evolución.');
+    else analysis.push('Las molestias registradas se han mantenido en una zona baja.');
+    if (hasValue_(metrics.previousSorenessAverage) && metrics.sorenessAverage - metrics.previousSorenessAverage >= 1) analysis.push('Las molestias medias han aumentado al menos un punto frente a tus cuatro semanas anteriores.');
+  }
+  if (hasValue_(metrics.weightChange) && Math.abs(metrics.weightChange) >= relevantWeightChange) {
+    analysis.push('El peso presenta una variación de ' + signedNumber_(metrics.weightChange, 1) + ' kg frente al último punto de referencia. Revisa el contexto de hidratación, horario y alimentación con el cuerpo técnico.');
+  } else if (hasValue_(metrics.weightChange)) {
+    analysis.push('El peso se mantiene estable respecto al último punto de referencia (' + signedNumber_(metrics.weightChange, 1) + ' kg).');
+  }
+  if (Number(attendanceCounts.unjustified || 0) > 0) analysis.push('Figura al menos una ausencia no justificada esta semana. Si es un error, comunícalo al cuerpo técnico.');
+  if (Number(attendanceCounts.late || 0) > 0) analysis.push('Se ha registrado al menos una llegada con retraso durante la semana.');
+  if (matchTotals.minutes > 0) analysis.push('Has acumulado ' + matchTotals.minutes + ' minutos de partido esta semana' + (matchTotals.starts ? ', con ' + matchTotals.starts + (matchTotals.starts === 1 ? ' titularidad.' : ' titularidades.') : '.'));
+  if (matchTotals.goals > 0) analysis.push('Has marcado ' + matchTotals.goals + (matchTotals.goals === 1 ? ' gol.' : ' goles.'));
+  return analysis;
+}
+
+function weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, analysis) {
+  return [
+    'Hola ' + firstName_(player.name) + ',',
+    '',
+    'Este es tu informe privado de Zabal Performance para la semana ' + periodLabel + '.',
+    '',
+    'CONTROLES',
+    'Registros: ' + metrics.controls,
+    'Peso más reciente: ' + valueOrDash_(metrics.latestWeight, 1, ' kg'),
+    'Fatiga media / máxima: ' + valueOrDash_(metrics.fatigueAverage, 1, '') + ' / ' + valueOrDash_(metrics.fatigueMax, 0, ''),
+    'Molestias medias / máximas: ' + valueOrDash_(metrics.sorenessAverage, 1, '') + ' / ' + valueOrDash_(metrics.sorenessMax, 0, ''),
+    '',
+    'ASISTENCIA',
+    attendanceSummaryText_(attendanceCounts),
+    '',
+    'PARTIDOS',
+    matchTotals.calledUp + ' convocatorias · ' + matchTotals.starts + ' titularidades · ' + matchTotals.minutes + ' minutos · ' + matchTotals.goals + ' goles',
+    '',
+    'ANÁLISIS PERSONAL',
+    analysis.map(function(item) { return '• ' + item; }).join('\n'),
+    '',
+    'Este informe contiene únicamente tus propios datos. Es orientativo y no sustituye una valoración médica o profesional.',
+    'Zabal Performance',
+  ].join('\n');
+}
+
+function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matches, metrics, attendanceCounts, matchTotals, analysis) {
+  const measurementRows = measurements.length ? measurements.map(function(item) {
+    return '<tr><td style="padding:10px;border-bottom:1px solid #e6ebf0">' + escapeHtml_(shortDate_(item.date)) + '</td>' +
+      '<td style="padding:10px;border-bottom:1px solid #e6ebf0;text-align:center">' + escapeHtml_(valueOrDash_(item.weight, 1, ' kg')) + '</td>' +
+      '<td style="padding:10px;border-bottom:1px solid #e6ebf0;text-align:center">' + escapeHtml_(valueOrDash_(item.fatigue, 0, '')) + '</td>' +
+      '<td style="padding:10px;border-bottom:1px solid #e6ebf0;text-align:center">' + escapeHtml_(valueOrDash_(item.soreness, 0, '')) + '</td>' +
+      '<td style="padding:10px;border-bottom:1px solid #e6ebf0">' + escapeHtml_(item.comments || '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="padding:18px;color:#66778a;text-align:center">No hay controles registrados esta semana.</td></tr>';
+  const attendanceRows = attendance.length ? attendance.map(function(item) {
+    const late = item.status === 'late' && item.lateMinutes ? ' · ' + item.lateMinutes + ' min' : '';
+    return '<span style="display:inline-block;margin:0 6px 7px 0;padding:7px 10px;border-radius:999px;background:#f2f5f8;color:#334a62;font-size:13px">' + escapeHtml_(shortDate_(item.date) + ' · ' + attendanceLabel_(item.status) + late) + '</span>';
+  }).join('') : '<span style="color:#66778a">Sin registros de asistencia esta semana.</span>';
+  const matchRows = matches.length ? matches.map(function(match) {
+    const role = match.calledUp ? (match.starter ? 'Titular' : 'Convocado') : 'No convocado';
+    return '<div style="padding:11px 0;border-bottom:1px solid #e6ebf0"><strong style="color:#17375f">' + escapeHtml_(shortDate_(match.date) + ' · ' + match.opponent) + '</strong><br><span style="color:#66778a;font-size:13px">' + escapeHtml_(role + ' · ' + match.minutes + ' min · ' + match.goals + ' goles · ' + match.yellowCards + ' amarillas · ' + match.redCards + ' rojas') + '</span></div>';
+  }).join('') : '<span style="color:#66778a">Sin datos de partido esta semana.</span>';
+  const analysisItems = analysis.map(function(item) { return '<li style="margin:0 0 10px;line-height:1.55">' + escapeHtml_(item) + '</li>'; }).join('');
+
+  return '<!doctype html><html><body style="margin:0;padding:0;background:#eef2f6;font-family:Arial,Helvetica,sans-serif;color:#25384c">' +
+    '<div style="max-width:680px;margin:0 auto;padding:24px 12px">' +
+      '<div style="padding:26px 28px;border-radius:18px 18px 0 0;background:#16365f;color:#fff">' +
+        '<div style="display:inline-block;margin-bottom:18px;padding:7px 10px;border-radius:7px;background:#f6ca3b;color:#16365f;font-size:12px;font-weight:700;letter-spacing:1px">ZABAL PERFORMANCE</div>' +
+        '<h1 style="margin:0 0 8px;font-size:28px;line-height:1.15">Tu semana, ' + escapeHtml_(firstName_(player.name)) + '</h1>' +
+        '<p style="margin:0;color:#cfdaea">Informe privado · ' + escapeHtml_(periodLabel) + '</p>' +
+      '</div>' +
+      '<div style="padding:26px 28px;background:#fff">' +
+        '<h2 style="margin:0 0 15px;color:#16365f;font-size:18px">Resumen de tus controles</h2>' +
+        '<table role="presentation" width="100%" cellspacing="8" cellpadding="0"><tr>' +
+          metricCardHtml_('Controles', String(metrics.controls)) +
+          metricCardHtml_('Peso reciente', valueOrDash_(metrics.latestWeight, 1, ' kg')) +
+          metricCardHtml_('Fatiga media', valueOrDash_(metrics.fatigueAverage, 1, '')) +
+          metricCardHtml_('Molestias medias', valueOrDash_(metrics.sorenessAverage, 1, '')) +
+        '</tr></table>' +
+        '<div style="height:24px"></div>' +
+        '<h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Tus datos diarios</h2>' +
+        '<div style="overflow-x:auto"><table width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6ebf0;border-radius:10px;border-collapse:collapse;font-size:13px"><thead><tr style="background:#f6f8fa;color:#526579"><th style="padding:10px;text-align:left">Fecha</th><th style="padding:10px">Peso</th><th style="padding:10px">Fatiga</th><th style="padding:10px">Molestias</th><th style="padding:10px;text-align:left">Comentario</th></tr></thead><tbody>' + measurementRows + '</tbody></table></div>' +
+        '<div style="height:26px"></div>' +
+        '<h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Tu asistencia</h2><div>' + attendanceRows + '</div>' +
+        '<p style="margin:9px 0 0;color:#66778a;font-size:13px">' + escapeHtml_(attendanceSummaryText_(attendanceCounts)) + '</p>' +
+        '<div style="height:26px"></div>' +
+        '<h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Tus partidos</h2>' + matchRows +
+        '<p style="margin:12px 0 0;color:#66778a;font-size:13px">' + escapeHtml_(matchTotals.calledUp + ' convocatorias · ' + matchTotals.starts + ' titularidades · ' + matchTotals.minutes + ' minutos · ' + matchTotals.goals + ' goles') + '</p>' +
+        '<div style="margin-top:28px;padding:20px;border-left:4px solid #f6ca3b;border-radius:10px;background:#fff9e5">' +
+          '<h2 style="margin:0 0 13px;color:#16365f;font-size:18px">Análisis personal</h2><ul style="margin:0;padding-left:20px">' + analysisItems + '</ul>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:18px 28px;border-radius:0 0 18px 18px;background:#f8fafc;color:#718096;font-size:12px;line-height:1.5">Este correo contiene únicamente los datos asociados a tu perfil. El análisis es orientativo y no sustituye una valoración médica o profesional.</div>' +
+    '</div></body></html>';
+}
+
+function metricCardHtml_(label, value) {
+  return '<td width="25%" style="padding:12px 8px;border:1px solid #e6ebf0;border-radius:10px;background:#f8fafc;text-align:center"><strong style="display:block;color:#16365f;font-size:20px">' + escapeHtml_(value) + '</strong><span style="color:#718096;font-size:11px">' + escapeHtml_(label) + '</span></td>';
+}
+
+function previousWeekRange_(referenceDate) {
+  const reference = new Date(referenceDate);
+  reference.setHours(12, 0, 0, 0);
+  const daysSinceMonday = (reference.getDay() + 6) % 7;
+  const currentMonday = new Date(reference);
+  currentMonday.setDate(currentMonday.getDate() - daysSinceMonday);
+  const start = new Date(currentMonday);
+  start.setDate(start.getDate() - 7);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { startKey: dateKey_(start), endKey: dateKey_(end) };
+}
+
+function shiftDateKey_(key, days) {
+  const parts = String(key).split('-').map(Number);
+  const date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+  date.setDate(date.getDate() + Number(days || 0));
+  return dateKey_(date);
+}
+
+function weeklyPeriodLabel_(startKey, endKey) {
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const start = String(startKey).split('-').map(Number);
+  const end = String(endKey).split('-').map(Number);
+  if (start[1] === end[1]) return start[2] + '–' + end[2] + ' ' + months[end[1] - 1] + ' ' + end[0];
+  return start[2] + ' ' + months[start[1] - 1] + ' – ' + end[2] + ' ' + months[end[1] - 1] + ' ' + end[0];
+}
+
+function shortDate_(key) {
+  const parts = String(key).split('-');
+  return parts.length === 3 ? parts[2] + '/' + parts[1] : String(key);
+}
+
+function numericValues_(items, property) {
+  return items.map(function(item) { return item[property]; }).filter(hasValue_).map(Number).filter(isFinite);
+}
+
+function average_(values) {
+  if (!values.length) return undefined;
+  return values.reduce(function(sum, value) { return sum + value; }, 0) / values.length;
+}
+
+function maximum_(values) {
+  return values.length ? Math.max.apply(null, values) : undefined;
+}
+
+function countBy_(items, property) {
+  return items.reduce(function(counts, item) {
+    const key = String(item[property] || 'pending');
+    counts[key] = Number(counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function attendanceLabel_(status) {
+  const labels = { pending: 'Pendiente', present: 'Presente', late: 'Retraso', justified: 'Ausencia justificada', unjustified: 'Ausencia no justificada', individual: 'Trabajo individual', medical: 'Servicio médico' };
+  return labels[String(status)] || String(status || 'Pendiente');
+}
+
+function attendanceSummaryText_(counts) {
+  const parts = [];
+  if (counts.present) parts.push(counts.present + ' presentes');
+  if (counts.late) parts.push(counts.late + ' retrasos');
+  if (counts.justified) parts.push(counts.justified + ' ausencias justificadas');
+  if (counts.unjustified) parts.push(counts.unjustified + ' ausencias no justificadas');
+  if (counts.individual) parts.push(counts.individual + ' sesiones individuales');
+  if (counts.medical) parts.push(counts.medical + ' registros médicos');
+  return parts.length ? parts.join(' · ') : 'Sin registros de asistencia esta semana.';
+}
+
+function valueOrDash_(value, decimals, suffix) {
+  return hasValue_(value) && isFinite(Number(value)) ? Number(value).toFixed(decimals).replace('.', ',') + suffix : '—';
+}
+
+function signedNumber_(value, decimals) {
+  const number = Number(value);
+  return (number > 0 ? '+' : '') + number.toFixed(decimals).replace('.', ',');
+}
+
+function firstName_(name) {
+  return String(name || 'jugador').trim().split(/\s+/)[0];
+}
+
+function parseStringList_(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (error) { return []; }
+}
+
+function isValidEmail_(email) {
+  const clean = String(email || '').trim();
+  return clean.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean);
+}
+
+function escapeHtml_(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getConfigValue_(key, fallback) {
+  const row = rows_(SHEETS.CONFIG).find(function(item) { return String(item.clave) === String(key); });
+  return row && hasValue_(row.valor) ? row.valor : fallback;
+}
+
+function weeklyAnalysisThresholds_() {
+  return {
+    fatigueModerate: Number(getConfigValue_('fatiga_moderada_desde', '4')),
+    fatigueAlert: Number(getConfigValue_('fatiga_alerta_desde', '7')),
+    sorenessModerate: Number(getConfigValue_('molestias_moderada_desde', '4')),
+    sorenessAlert: Number(getConfigValue_('molestias_alerta_desde', '7')),
+    relevantWeightChange: Number(getConfigValue_('cambio_peso_relevante_kg', '1.5')),
+  };
 }
 
 function getMatches_(session) {
