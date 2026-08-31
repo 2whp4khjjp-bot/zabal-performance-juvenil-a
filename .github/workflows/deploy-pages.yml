@@ -56,7 +56,7 @@ jobs:
           VITE_DATA_PROVIDER: google-sheets
           VITE_TEAM_NAME: ${{ vars.VITE_TEAM_NAME || 'Atlético Zabal Linense · Juvenil A' }}
           VITE_APPS_SCRIPT_URL: ${{ vars.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbxd14RX1ewTQtsSaK01aZzJI9KHJ5MpiYwAwjxe4jsiX7EuY1c7jZNUmxVYUQF6C7GLBA/exec' }}
-          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL || 'https://juvenila.atleticozabal.com/' }}
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL || 'https://juvenil.atleticozabal.com/' }}
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || '/' }}
         run: pnpm build
 
