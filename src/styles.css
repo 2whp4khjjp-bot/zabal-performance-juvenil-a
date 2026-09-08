@@ -400,6 +400,10 @@ tbody tr:hover { background: #f8fafc; }
 .match-form-summary strong { color: var(--navy); }
 .match-minutes-card .validation-summary { margin-right: 0; margin-left: 0; }
 .match-save-bar { position: sticky; bottom: 0; z-index: 5; margin: 16px -22px 0; padding: 15px 22px; border-top: 1px solid var(--border); background: rgba(250,251,253,.96); backdrop-filter: blur(8px); }
+.match-scope-control { margin-bottom: 14px; padding: 12px 15px; border: 1px solid #cbdbea; border-radius: 12px; display: flex; align-items: center; gap: 12px; color: #526174; background: #f2f7fb; font-size: .78rem; }
+.match-scope-control > span:first-child { margin-right: auto; }
+.match-scope-control label { display: flex; align-items: center; gap: 8px; color: var(--navy); font-weight: 800; }
+.match-scope-control select { min-width: 160px; height: 38px; padding: 0 10px; border: 1px solid #bdcfdf; border-radius: 8px; color: var(--navy); background: #fff; font-weight: 800; }
 .matches-history-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); align-items: start; gap: 18px; }
 .count-badge--blue { color: #245f95; background: #e3eff9; }
 .match-totals-card { padding: 0; overflow: hidden; }
@@ -663,6 +667,10 @@ tbody tr:hover { background: #f8fafc; }
   .match-minutes-heading { align-items: flex-start; flex-direction: column; }
   .match-save-bar { margin-right: -15px; margin-left: -15px; padding-right: 15px; padding-left: 15px; }
   .match-form-summary { gap: 9px; flex-direction: column; }
+  .match-scope-control { align-items: stretch; flex-direction: column; }
+  .match-scope-control > span:first-child { margin-right: 0; }
+  .match-scope-control label { justify-content: space-between; }
+  .match-scope-control select { min-width: 0; }
   .attendance-toolbar > label { align-items: stretch; flex-direction: column; }
   .attendance-counts { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
   .attendance-counts span { padding: 6px 4px; font-size: .66rem; }

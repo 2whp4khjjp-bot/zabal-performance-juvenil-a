@@ -205,7 +205,9 @@ export class LocalDataService implements DataService {
 
   async getMatches(token: string): Promise<MatchRecord[]> {
     const auth = this.requireSession(token);
-    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []).sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, [])
+      .map((match) => ({ ...match, stage: match.stage === 'league' ? 'league' as const : 'preseason' as const }))
+      .sort((a, b) => `${b.date}${b.createdAt}`.localeCompare(`${a.date}${a.createdAt}`));
     return auth.role === 'player' ? matches.map((match) => ({ ...match, minutes: match.minutes.filter((entry) => entry.playerId === auth.playerId) })) : matches;
   }
 
@@ -214,6 +216,7 @@ export class LocalDataService implements DataService {
     if (auth.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede guardar partidos.', 'FORBIDDEN');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new DataServiceError('La fecha del partido no es válida.', 'VALIDATION');
     if (!['official', 'friendly'].includes(input.type)) throw new DataServiceError('El tipo de partido no es válido.', 'VALIDATION');
+    if (!['preseason', 'league'].includes(input.stage)) throw new DataServiceError('La fase del partido no es válida.', 'VALIDATION');
     const opponent = input.opponent.replace(/[<>]/g, '').trim().slice(0, 100);
     if (!opponent) throw new DataServiceError('Introduce el rival.', 'VALIDATION');
     if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 180) {
@@ -243,7 +246,7 @@ export class LocalDataService implements DataService {
     if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
     const now = new Date().toISOString();
     const match: MatchRecord = {
-      id: crypto.randomUUID(), date: input.date, type: input.type, opponent,
+      id: crypto.randomUUID(), date: input.date, type: input.type, stage: input.stage, opponent,
       durationMinutes: input.durationMinutes, minutes, createdAt: now, updatedAt: now, createdBy: 'cuerpo-tecnico',
     };
     const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);

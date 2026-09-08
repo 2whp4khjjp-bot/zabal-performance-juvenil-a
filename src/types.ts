@@ -137,6 +137,7 @@ export type LoginResult = {
 export type ReportKind = 'daily' | 'weekly' | 'player' | 'alerts';
 
 export type MatchType = 'official' | 'friendly';
+export type MatchStage = 'preseason' | 'league';
 
 export type MatchMinutes = {
   playerId: string;
@@ -159,6 +160,8 @@ export type MatchRecord = {
   id: string;
   date: string;
   type: MatchType;
+  /** Ausente únicamente en registros antiguos, que se consideran de pretemporada. */
+  stage?: MatchStage;
   opponent: string;
   durationMinutes: number;
   minutes: MatchMinutes[];
@@ -171,6 +174,7 @@ export type MatchInput = {
   requestId?: string;
   date: string;
   type: MatchType;
+  stage: MatchStage;
   opponent: string;
   durationMinutes: number;
   minutes: MatchMinutes[];

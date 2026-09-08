@@ -1,6 +1,7 @@
 import { appConfig } from '../config';
 import type { AttendanceRecord, MatchRecord, Measurement, Player } from '../types';
 import { totalInjuryDays } from './injuries';
+import { matchesInScope } from './matches';
 
 const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : undefined;
 const rounded = (value: number | undefined, digits = 1) => value === undefined ? undefined : Number(value.toFixed(digits));
@@ -20,13 +21,14 @@ export type PlayerAnalysis = {
 export function analyzePlayer(player: Player, measurements: Measurement[], matches: MatchRecord[], attendance: AttendanceRecord[]): PlayerAnalysis {
   const playerMeasurements = measurements.filter((item) => item.playerId === player.id).sort((a, b) => (a.date + a.createdAt).localeCompare(b.date + b.createdAt));
   const playerMatches = matches.filter((match) => match.minutes.some((entry) => entry.playerId === player.id)).sort((a, b) => a.date.localeCompare(b.date));
+  const leaguePlayerMatches = matchesInScope(playerMatches, 'league');
   const playerAttendance = attendance.filter((item) => item.playerId === player.id && item.status !== 'pending').sort((a, b) => a.date.localeCompare(b.date));
   const weights = playerMeasurements.flatMap((item) => item.weight === undefined ? [] : [item.weight]);
   const fatigue = playerMeasurements.flatMap((item) => item.fatigue === undefined ? [] : [item.fatigue]);
   const soreness = playerMeasurements.flatMap((item) => item.soreness === undefined ? [] : [item.soreness]);
   const recentFatigue = fatigue.slice(-5);
   const recentSoreness = soreness.slice(-5);
-  const entries = playerMatches.map((match) => match.minutes.find((entry) => entry.playerId === player.id)!).filter(Boolean);
+  const entries = leaguePlayerMatches.map((match) => match.minutes.find((entry) => entry.playerId === player.id)!).filter(Boolean);
   const competition = {
     calledUp: entries.filter((entry) => entry.calledUp).length,
     appearances: entries.filter((entry) => entry.minutes > 0).length,
@@ -74,8 +76,8 @@ export function analyzePlayer(player: Player, measurements: Measurement[], match
     if (wellness.fatigueRecent !== undefined) conclusions.push(`La fatiga reciente promedia ${wellness.fatigueRecent}/10${wellness.fatigueAverage !== undefined ? ` frente a ${wellness.fatigueAverage}/10 en el conjunto del periodo` : ''}${wellness.highFatigue ? `, con ${wellness.highFatigue} registro${wellness.highFatigue === 1 ? '' : 's'} en nivel de alerta` : ''}.`);
     if (wellness.sorenessRecent !== undefined) conclusions.push(`Las molestias recientes promedian ${wellness.sorenessRecent}/10${wellness.sorenessAverage !== undefined ? ` frente a ${wellness.sorenessAverage}/10 en el conjunto del periodo` : ''}${wellness.highSoreness ? `, con ${wellness.highSoreness} registro${wellness.highSoreness === 1 ? '' : 's'} en nivel de alerta` : ''}.`);
   }
-  if (competition.calledUp) conclusions.push(`En competición suma ${competition.minutes} minutos en ${countLabel(competition.appearances, 'aparición', 'apariciones')}, ${countLabel(competition.starts, 'titularidad', 'titularidades')} y ${countLabel(competition.goals, 'gol', 'goles')} sobre ${countLabel(competition.calledUp, 'convocatoria', 'convocatorias')}.`);
-  else conclusions.push('No constan convocatorias en los partidos registrados.');
+  if (competition.calledUp) conclusions.push(`En liga suma ${competition.minutes} minutos en ${countLabel(competition.appearances, 'aparición', 'apariciones')}, ${countLabel(competition.starts, 'titularidad', 'titularidades')} y ${countLabel(competition.goals, 'gol', 'goles')} sobre ${countLabel(competition.calledUp, 'convocatoria', 'convocatorias')}.`);
+  else conclusions.push('No constan convocatorias en los partidos de liga registrados.');
   if (availability.trainingRecords) conclusions.push(`En asistencia constan ${countLabel(availability.present, 'presencia', 'presencias')} de ${countLabel(availability.trainingRecords, 'registro', 'registros')}, ${countLabel(availability.lateArrivals, 'retraso', 'retrasos')} (${availability.lateMinutes} min) y ${countLabel(availability.justified + availability.unjustified + availability.medical, 'ausencia contabilizada', 'ausencias contabilizadas')}.`);
   if (availability.injuryPeriods) conclusions.push(`Acumula ${availability.injuryDays} días en ${availability.injuryPeriods} periodo${availability.injuryPeriods === 1 ? '' : 's'} de baja${availability.activeInjury ? '; actualmente mantiene una baja activa' : ''}.`);
   if (availability.activeInjury || wellness.highFatigue > 0 || wellness.highSoreness > 0 || (wellness.fatigueRecent ?? 0) >= appConfig.thresholds.alertFrom || (wellness.sorenessRecent ?? 0) >= appConfig.thresholds.alertFrom) conclusions.push('Se recomienda revisión prioritaria por el cuerpo técnico y, cuando corresponda, por personal sanitario antes de ajustar la carga.');

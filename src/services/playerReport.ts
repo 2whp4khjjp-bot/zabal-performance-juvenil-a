@@ -1,5 +1,6 @@
 import { appConfig } from '../config';
 import type { AttendanceRecord, MatchRecord, Measurement, Player } from '../types';
+import { getMatchStage, matchStageLabel } from '../utils/matches';
 import { formatDate, todayKey } from '../utils/date';
 import { analyzePlayer } from '../utils/playerAnalysis';
 import { injuryPeriodDays } from '../utils/injuries';
@@ -125,7 +126,7 @@ export async function buildPlayerPdf(player: Player, measurements: Measurement[]
 
   metric(doc, 14, 67, 43, 'Controles', String(analysis.measurements.length), `${analysis.wellness.highFatigue + analysis.wellness.highSoreness} valores en alerta`);
   metric(doc, 60, 67, 43, 'Peso', analysis.weight.latest === undefined ? '—' : `${analysis.weight.latest} kg`, analysis.weight.change === undefined ? 'Sin tendencia' : `${analysis.weight.change > 0 ? '+' : ''}${analysis.weight.change} kg en el periodo`);
-  metric(doc, 106, 67, 43, 'Competición', `${analysis.competition.minutes} min`, `${analysis.competition.goals} goles · ${analysis.competition.starts} titularidades`);
+  metric(doc, 106, 67, 43, 'Liga', `${analysis.competition.minutes} min`, `${analysis.competition.goals} goles · ${analysis.competition.starts} titularidades`);
   metric(doc, 152, 67, 44, 'Disponibilidad', `${analysis.availability.injuryDays} días`, `${analysis.availability.lateMinutes} min de retraso`);
 
   miniTrend(doc, 14, 102, 57, 'Peso (kg)', analysis.measurements.flatMap((item) => item.weight === undefined ? [] : [item.weight]), [41, 110, 175]);
@@ -174,18 +175,18 @@ export async function buildPlayerPdf(player: Player, measurements: Measurement[]
     },
   }); else emptySection(doc, 'No hay mediciones registradas para este jugador.');
 
-  addSectionPage(doc, 'Partidos y rendimiento', `${player.name} · ${analysis.competition.minutes} minutos acumulados`);
+  addSectionPage(doc, 'Partidos y rendimiento', `${player.name} · ${analysis.competition.minutes} minutos de liga · historial completo`);
   if (analysis.matches.length) autoTable(doc, {
     startY: 45,
-    head: [['Fecha', 'Rival', 'Tipo', 'Conv.', 'Tit.', 'Min.', 'Goles', 'TA', 'TR']],
+    head: [['Fecha', 'Rival', 'Fase', 'Tipo', 'Conv.', 'Tit.', 'Min.', 'Goles', 'TA', 'TR']],
     body: [...analysis.matches].reverse().map((match) => {
       const entry = match.minutes.find((item) => item.playerId === player.id)!;
-      return [formatDate(match.date), match.opponent, match.type === 'official' ? 'Oficial' : 'Amistoso', entry.calledUp ? 'Sí' : 'No', entry.starter ? 'Sí' : 'No', entry.minutes, entry.goals ?? 0, entry.yellowCards ?? 0, entry.redCards ?? 0];
+      return [formatDate(match.date), match.opponent, matchStageLabel(getMatchStage(match)), match.type === 'official' ? 'Oficial' : 'Amistoso', entry.calledUp ? 'Sí' : 'No', entry.starter ? 'Sí' : 'No', entry.minutes, entry.goals ?? 0, entry.yellowCards ?? 0, entry.redCards ?? 0];
     }),
     styles: { fontSize: 7.4, cellPadding: 2.1, halign: 'center' },
     headStyles: { fillColor: [22, 54, 95], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [246, 248, 251] },
-    columnStyles: { 1: { halign: 'left', cellWidth: 47 } },
+    columnStyles: { 1: { halign: 'left', cellWidth: 37 } },
     margin: { top: 28, bottom: 18 },
     didDrawPage: (data) => {
       if (data.pageNumber <= 1) return;

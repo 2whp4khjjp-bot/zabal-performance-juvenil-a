@@ -3,7 +3,7 @@ import type { MatchRecord, Player } from '../types';
 import { todayKey } from '../utils/date';
 import { addPdfFooters } from './pdfBrand';
 
-export const generateMinutesPdf = async (players: Player[], matches: MatchRecord[]) => {
+export const generateMinutesPdf = async (players: Player[], matches: MatchRecord[], scopeLabel = 'Liga') => {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   const totals = new Map(players.filter((player) => !player.staffMember).map((player) => [player.id, {
     player, callUps: 0, starts: 0, appearances: 0, minutes: 0,
@@ -28,7 +28,7 @@ export const generateMinutesPdf = async (players: Player[], matches: MatchRecord
   doc.setFontSize(19);
   doc.text('ZABAL PERFORMANCE', 14, 15);
   doc.setFontSize(10);
-  doc.text(`Informe de minutos · Temporada ${appConfig.season}`, 14, 24);
+  doc.text(`Informe de minutos · ${scopeLabel} · Temporada ${appConfig.season}`, 14, 24);
   doc.setTextColor(35, 49, 66);
   doc.setFontSize(9);
   doc.text(`${appConfig.teamName} · Generado ${new Date().toLocaleString('es-ES')}`, 14, 46);

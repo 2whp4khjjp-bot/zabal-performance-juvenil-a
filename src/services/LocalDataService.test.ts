@@ -68,7 +68,7 @@ describe('servicio local', () => {
     const { auth: staff } = await service.authenticate('2026', 'staff');
     const players = await service.getPlayers(staff.token);
     const saved = await service.saveMatch(staff.token, {
-      date: '2026-08-09', type: 'official', opponent: 'UD Los Barrios', durationMinutes: 90,
+      date: '2026-08-09', type: 'official', stage: 'league', opponent: 'UD Los Barrios', durationMinutes: 90,
       minutes: [{ playerId: players[0].id, playerName: players[0].name, calledUp: true, starter: true, minutes: 74, goals: 1 }],
     });
     expect(saved.durationMinutes).toBe(90);
@@ -84,7 +84,7 @@ describe('servicio local', () => {
     const service = new LocalDataService();
     const { auth: staff } = await service.authenticate('2026', 'staff');
     const players = await service.getPlayers(staff.token);
-    const input = { requestId: 'request-1', date: '2026-08-10', type: 'friendly' as const, opponent: 'Lynx', durationMinutes: 90, minutes: [{ playerId: players[0].id, playerName: players[0].name, calledUp: true, minutes: 45 }] };
+    const input = { requestId: 'request-1', date: '2026-08-10', type: 'friendly' as const, stage: 'preseason' as const, opponent: 'Lynx', durationMinutes: 90, minutes: [{ playerId: players[0].id, playerName: players[0].name, calledUp: true, minutes: 45 }] };
     const first = await service.saveMatch(staff.token, input);
     const retry = await service.saveMatch(staff.token, input);
     expect(retry.id).toBe(first.id);

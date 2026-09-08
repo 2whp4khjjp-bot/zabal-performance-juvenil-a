@@ -7,7 +7,10 @@ const measurements: Measurement[] = [
   { id: 'm1', date: '2026-08-01', time: '10:00', createdAt: '2026-08-01T10:00:00Z', playerId: 'p1', playerName: 'Jugador', weight: 70, fatigue: 3, soreness: 2, comments: '', sessionId: 's', createdBy: 'ct', updatedAt: '' },
   { id: 'm2', date: '2026-08-08', time: '10:00', createdAt: '2026-08-08T10:00:00Z', playerId: 'p1', playerName: 'Jugador', weight: 72, fatigue: 8, soreness: 7, comments: '', sessionId: 's', createdBy: 'ct', updatedAt: '' },
 ];
-const matches: MatchRecord[] = [{ id: 'g1', date: '2026-08-10', type: 'friendly', opponent: 'Rival', durationMinutes: 90, createdAt: '', updatedAt: '', createdBy: 'ct', minutes: [{ playerId: 'p1', playerName: 'Jugador', calledUp: true, starter: true, minutes: 75, goals: 1, yellowCards: 1, redCards: 0 }] }];
+const matches: MatchRecord[] = [
+  { id: 'p0', date: '2026-08-03', type: 'friendly', stage: 'preseason', opponent: 'Rival anterior', durationMinutes: 90, createdAt: '', updatedAt: '', createdBy: 'ct', minutes: [{ playerId: 'p1', playerName: 'Jugador', calledUp: true, starter: true, minutes: 90, goals: 2, yellowCards: 2, redCards: 0 }] },
+  { id: 'g1', date: '2026-08-10', type: 'official', stage: 'league', opponent: 'Rival', durationMinutes: 90, createdAt: '', updatedAt: '', createdBy: 'ct', minutes: [{ playerId: 'p1', playerName: 'Jugador', calledUp: true, starter: true, minutes: 75, goals: 1, yellowCards: 1, redCards: 0 }] },
+];
 const attendance: AttendanceRecord[] = [{ id: 'a1', date: '2026-08-11', playerId: 'p1', playerName: 'Jugador', status: 'late', lateMinutes: 8, comments: '', createdAt: '', updatedAt: '', createdBy: 'ct' }];
 
 describe('analyzePlayer', () => {
@@ -15,6 +18,7 @@ describe('analyzePlayer', () => {
     const result = analyzePlayer(player, measurements, matches, attendance);
     expect(result.weight.change).toBe(2);
     expect(result.competition).toMatchObject({ calledUp: 1, appearances: 1, starts: 1, minutes: 75, goals: 1 });
+    expect(result.matches).toHaveLength(2);
     expect(result.availability).toMatchObject({ lateArrivals: 1, lateMinutes: 8, injuryDays: 3 });
     expect(result.conclusions.join(' ')).toContain('revisión prioritaria');
   });

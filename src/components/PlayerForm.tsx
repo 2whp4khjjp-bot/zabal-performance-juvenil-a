@@ -5,6 +5,7 @@ import { formatDate, todayKey } from '../utils/date';
 import { average, parseWeight, recentForPlayer, weightChange } from '../utils/measurements';
 import { Sparkline } from './Sparkline';
 import { injuryPeriodDays, playerIsInjuredOn, totalInjuryDays } from '../utils/injuries';
+import { matchesInScope } from '../utils/matches';
 
 type FormProps = {
   player: Player;
@@ -118,7 +119,7 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   };
 
   const change = weightChange(history);
-  const discipline = matches.reduce((totals, match) => {
+  const discipline = matchesInScope(matches, 'league').reduce((totals, match) => {
     const entry = match.minutes.find((item) => item.playerId === player.id);
     return { yellow: totals.yellow + (entry?.yellowCards ?? 0), red: totals.red + (entry?.redCards ?? 0) };
   }, { yellow: 0, red: 0 });
@@ -132,8 +133,8 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(measurementDate)}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando una medición existente</span>}</div>
       </div>
       {(discipline.yellow > 0 || discipline.red > 0) && <section className={`discipline-profile-alert ${sanctionWarning ? 'discipline-profile-alert--danger' : ''}`}>
-        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellow} amarillas</strong>
-        <span className="card-mark card-mark--red" /> <strong>{discipline.red} rojas</strong>
+        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellow} amarillas de liga</strong>
+        <span className="card-mark card-mark--red" /> <strong>{discipline.red} rojas de liga</strong>
         {sanctionWarning && <em>Alerta: a una amarilla de sanción</em>}
       </section>}
 

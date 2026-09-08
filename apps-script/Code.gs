@@ -21,7 +21,7 @@ const HEADERS = {
   Sesiones: ['id', 'fecha', 'tipo_sesion', 'rival', 'jornada', 'activa', 'hora_apertura', 'hora_cierre'],
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
-  Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por'],
+  Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por', 'fase'],
   'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular'],
   Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'motivo', 'creado_en', 'actualizado_en'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'minutos_retraso', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
@@ -71,7 +71,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 7 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 8 } });
 }
 
 function doPost(event) {
@@ -982,6 +982,7 @@ function weeklyAnalysisThresholds_() {
 }
 
 function getMatches_(session) {
+  ensureMatchSchema_();
   ensureMatchMinutesSchema_();
   const minutesByMatch = {};
   rows_(SHEETS.MATCH_MINUTES).forEach(function(row) {
@@ -1003,6 +1004,9 @@ function getMatches_(session) {
       id: String(row.id),
       date: dateKey_(row.fecha),
       type: String(row.tipo) === 'friendly' ? 'friendly' : 'official',
+      // Los registros anteriores a esta versión no tenían fase y se conservan
+      // como pretemporada para que nunca contaminen los acumulados de liga.
+      stage: String(row.fase) === 'league' ? 'league' : 'preseason',
       opponent: String(row.rival || ''),
       durationMinutes: Number(row.duracion_minutos || 90),
       minutes: (minutesByMatch[String(row.id)] || []).filter(function(entry) { return session.role === 'staff' || entry.playerId === String(session.playerId); }),
@@ -1020,11 +1024,13 @@ function validateMatchInput_(input, session) {
   if (!input) throw apiError_('Faltan los datos del partido.', 'VALIDATION');
   const date = String(input.date || '').trim();
   const type = String(input.type || '') === 'friendly' ? 'friendly' : String(input.type || '') === 'official' ? 'official' : '';
+  const stage = String(input.stage || 'league') === 'preseason' ? 'preseason' : String(input.stage || 'league') === 'league' ? 'league' : '';
   const opponent = String(input.opponent || '').replace(/[<>]/g, '').trim().slice(0, 100);
   const duration = Number(input.durationMinutes);
   const entries = Array.isArray(input.minutes) ? input.minutes : [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw apiError_('La fecha del partido no es válida.', 'VALIDATION');
   if (!type) throw apiError_('El tipo de partido no es válido.', 'VALIDATION');
+  if (!stage) throw apiError_('La fase del partido no es válida.', 'VALIDATION');
   if (!opponent) throw apiError_('Introduce el rival.', 'VALIDATION');
   if (!Number.isInteger(duration) || duration < 1 || duration > 180) throw apiError_('La duración del partido no es válida.', 'VALIDATION');
   if (!entries.length) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
@@ -1054,7 +1060,7 @@ function validateMatchInput_(input, session) {
   if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
   if (cleanEntries.filter(function(entry) { return entry.starter; }).length > MAX_STARTERS) throw apiError_('No puedes marcar más de ' + MAX_STARTERS + ' titulares.', 'VALIDATION');
 
-  return { date: date, type: type, opponent: opponent, duration: duration, entries: cleanEntries };
+  return { date: date, type: type, stage: stage, opponent: opponent, duration: duration, entries: cleanEntries };
 }
 
 function saveMatch_(input, session) {
@@ -1069,12 +1075,12 @@ function saveMatch_(input, session) {
     }
     const id = requestedId || Utilities.getUuid();
     const now = new Date();
-    sheet_(SHEETS.MATCHES).appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico']);
+    ensureMatchSchema_().appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico', clean.stage]);
     const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     return {
-      id: id, date: clean.date, type: clean.type, opponent: clean.opponent, durationMinutes: clean.duration,
+      id: id, date: clean.date, type: clean.type, stage: clean.stage, opponent: clean.opponent, durationMinutes: clean.duration,
       minutes: clean.entries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
     };
   } finally {
@@ -1088,7 +1094,7 @@ function updateMatch_(matchId, input, session) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
   try {
-    const matchesSheet = sheet_(SHEETS.MATCHES);
+    const matchesSheet = ensureMatchSchema_();
     const matchValues = matchesSheet.getDataRange().getValues();
     const matchHeaders = matchValues[0].map(String);
     const idColumn = matchHeaders.indexOf('id');
@@ -1100,6 +1106,7 @@ function updateMatch_(matchId, input, session) {
       if (header === 'id') return id;
       if (header === 'fecha') return clean.date;
       if (header === 'tipo') return clean.type;
+      if (header === 'fase') return clean.stage;
       if (header === 'rival') return clean.opponent;
       if (header === 'duracion_minutos') return clean.duration;
       if (header === 'creado_en') return createdAt;
@@ -1139,6 +1146,13 @@ function ensureMatchMinutesSchema_() {
   const targetSheet = sheet_(SHEETS.MATCH_MINUTES);
   const headers = targetSheet.getRange(1, 1, 1, Math.max(1, targetSheet.getLastColumn())).getValues()[0].map(String);
   if (headers.indexOf('titular') < 0) targetSheet.getRange(1, headers.length + 1).setValue('titular');
+  return targetSheet;
+}
+
+function ensureMatchSchema_() {
+  const targetSheet = sheet_(SHEETS.MATCHES);
+  const headers = targetSheet.getRange(1, 1, 1, Math.max(1, targetSheet.getLastColumn())).getValues()[0].map(String);
+  if (headers.indexOf('fase') < 0) targetSheet.getRange(1, headers.length + 1).setValue('fase');
   return targetSheet;
 }
 

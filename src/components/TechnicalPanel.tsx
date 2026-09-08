@@ -7,6 +7,7 @@ import { exportCsv, exportExcel } from '../services/exports';
 import { generatePdfReport } from '../services/reports';
 import { generateTeamInjuriesPdf } from '../services/injuryReport';
 import { Sparkline } from './Sparkline';
+import { matchesInScope } from '../utils/matches';
 
 type SortKey = keyof Pick<Measurement, 'date' | 'time' | 'playerName' | 'weight' | 'fatigue' | 'soreness'> | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -34,9 +35,10 @@ export function TechnicalPanel({ players, measurements, matches, attendance }: {
   const injuryCount = players.filter((player) => player.injured).length;
   const availablePlayers = players.filter((player) => !player.injured);
   const registeredAvailable = new Set(availablePlayers.filter((player) => registeredIds.has(player.id)).map((player) => player.id));
+  const leagueMatches = useMemo(() => matchesInScope(matches, 'league'), [matches]);
   const disciplineAlerts = players.map((player) => {
-    const yellowCards = matches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.yellowCards ?? 0), 0);
-    const redCards = matches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.redCards ?? 0), 0);
+    const yellowCards = leagueMatches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.yellowCards ?? 0), 0);
+    const redCards = leagueMatches.reduce((sum, match) => sum + (match.minutes.find((entry) => entry.playerId === player.id)?.redCards ?? 0), 0);
     return { player, yellowCards, redCards };
   }).filter((item) => item.redCards > 0 || (item.yellowCards > 0 && item.yellowCards % 5 === 4));
 
@@ -102,7 +104,7 @@ export function TechnicalPanel({ players, measurements, matches, attendance }: {
       </section>
 
       {disciplineAlerts.length > 0 && <section className="panel-card discipline-alerts-card">
-        <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Disciplina</p><h2>Alertas de tarjetas</h2></div><span className="count-badge">{disciplineAlerts.length}</span></div>
+        <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Disciplina · Liga</p><h2>Alertas de tarjetas</h2></div><span className="count-badge">{disciplineAlerts.length}</span></div>
         {disciplineAlerts.map((item) => <div className="alert-row discipline-alert-row" key={item.player.id}><span>{item.player.name}</span><strong><span className="card-mark card-mark--yellow" /> {item.yellowCards}</strong><strong><span className="card-mark card-mark--red" /> {item.redCards}</strong>{item.yellowCards % 5 === 4 && <em>A una amarilla de sanción</em>}</div>)}
       </section>}
 

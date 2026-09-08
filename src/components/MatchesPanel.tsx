@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CalendarDays, Check, Clock3, FileDown, Goal, History, Medal, Pencil, Save, ShieldAlert, Star, Trash2, Trophy, UsersRound, X } from 'lucide-react';
-import type { MatchInput, MatchRecord, MatchType, Player } from '../types';
+import type { MatchInput, MatchRecord, MatchStage, MatchType, Player } from '../types';
 import { todayKey } from '../utils/date';
+import { getMatchStage, matchesInScope, matchScopeLabel, matchStageLabel, type MatchScope } from '../utils/matches';
 import { appConfig } from '../config';
 import { generateMinutesPdf } from '../services/matchReports';
 
@@ -25,6 +26,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [editingId, setEditingId] = useState<string | null>(null);
   const [date, setDate] = useState(todayKey());
   const [type, setType] = useState<MatchType>('official');
+  const [stage, setStage] = useState<MatchStage>('league');
+  const [scope, setScope] = useState<MatchScope>('league');
   const [opponent, setOpponent] = useState('');
   const [durationOption, setDurationOption] = useState('90');
   const [customDuration, setCustomDuration] = useState('90');
@@ -48,11 +51,12 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const enteredCount = formPlayers.filter((player) => calledUpByPlayer[player.id]).length;
   const starterCount = formPlayers.filter((player) => starterByPlayer[player.id]).length;
   const totalEnteredMinutes = enteredValues.reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const scopedMatches = useMemo(() => matchesInScope(matches, scope), [matches, scope]);
 
   const totals = useMemo(() => {
     const byPlayer = new Map<string, { player: Player; callUps: number; starts: number; appearances: number; minutes: number; goals: number; yellowCards: number; redCards: number }>();
     players.filter((player) => !player.staffMember).forEach((player) => byPlayer.set(player.id, { player, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 }));
-    matches.forEach((match) => match.minutes.forEach((entry) => {
+    scopedMatches.forEach((match) => match.minutes.forEach((entry) => {
       const total = byPlayer.get(entry.playerId);
       if (!total) return;
       total.minutes += entry.minutes;
@@ -64,7 +68,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       if (entry.minutes > 0) total.appearances += 1;
     }));
     return [...byPlayer.values()].sort((a, b) => (a.player.number ?? 999) - (b.player.number ?? 999) || a.player.order - b.player.order);
-  }, [matches, players]);
+  }, [scopedMatches, players]);
 
   const rankings = useMemo(() => ({
     scorers: [...totals].filter((item) => item.goals > 0).sort((a, b) => b.goals - a.goals || b.minutes - a.minutes).slice(0, 5),
@@ -104,6 +108,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     const input: MatchInput = {
       date,
       type,
+      stage,
       opponent: opponent.trim(),
       durationMinutes: duration,
       minutes: formPlayers.map((player) => {
@@ -130,7 +135,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   };
 
   const editMatch = (match: MatchRecord) => {
-    setEditingId(match.id); setDate(match.date); setType(match.type); setOpponent(match.opponent);
+    setEditingId(match.id); setDate(match.date); setType(match.type); setStage(getMatchStage(match)); setOpponent(match.opponent);
     const option = durationOptions.includes(match.durationMinutes as typeof durationOptions[number]) ? String(match.durationMinutes) : 'custom';
     setDurationOption(option); setCustomDuration(String(match.durationMinutes));
     setCalledUpByPlayer(Object.fromEntries(allPlayers.map((player) => [player.id, Boolean(match.minutes.find((entry) => entry.playerId === player.id)?.calledUp)])));
@@ -143,7 +148,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   };
 
   const cancelEdit = () => {
-    setEditingId(null); setOpponent(''); setMinutesByPlayer({}); setGoalsByPlayer({}); setYellowByPlayer({}); setRedByPlayer({}); setStarterByPlayer({}); setErrors([]);
+    setEditingId(null); setStage('league'); setOpponent(''); setMinutesByPlayer({}); setGoalsByPlayer({}); setYellowByPlayer({}); setRedByPlayer({}); setStarterByPlayer({}); setErrors([]);
     setCalledUpByPlayer(Object.fromEntries(eligiblePlayers.map((player) => [player.id, true])));
   };
 
@@ -163,6 +168,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
           <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Datos del encuentro</p><h2>{editingId ? 'Editar partido' : 'Nuevo partido'}</h2></div>{editingId ? <button type="button" className="text-button" onClick={cancelEdit}><X size={17} /> Cancelar edición</button> : <CalendarDays />}</div>
           <div className="match-fields">
             <label>Fecha<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+            <label>Fase<select value={stage} onChange={(event) => setStage(event.target.value as MatchStage)}><option value="league">Liga</option><option value="preseason">Pretemporada</option></select></label>
             <label>Tipo<select value={type} onChange={(event) => setType(event.target.value as MatchType)}><option value="official">Oficial</option><option value="friendly">Amistoso</option></select></label>
             <label className="match-field--wide">Rival<input value={opponent} maxLength={100} onChange={(event) => setOpponent(event.target.value)} placeholder="Nombre del equipo rival" /></label>
             <label className="match-field--wide">Duración total<select value={durationOption} onChange={(event) => setDurationOption(event.target.value)}>{durationOptions.map((value) => <option key={value} value={value}>{value} minutos</option>)}<option value="custom">Personalizado</option></select></label>
@@ -192,25 +198,33 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
           <div className="match-save-bar"><button className="button button--primary button--wide" disabled={saving} type="submit"><Save size={19} /> {saving ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Guardar acta'}</button></div>
         </section>
       </form> : mode === 'history' ? <section className="matches-history" aria-label="Historial de partidos">
+        <MatchScopeControl scope={scope} onChange={setScope} count={scopedMatches.length} />
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
-            <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Temporada</p><h2>Totales por jugador</h2></div><div className="match-totals-heading-actions"><button type="button" className="button button--secondary" disabled={generatingMinutesPdf || !totals.length} onClick={() => { setGeneratingMinutesPdf(true); void generateMinutesPdf(players, matches).finally(() => setGeneratingMinutesPdf(false)); }}><FileDown size={17} /> {generatingMinutesPdf ? 'Creando…' : 'Informe PDF'}</button><span className="count-badge count-badge--blue">{matches.length}</span></div></div>
+            <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">{matchScopeLabel(scope)}</p><h2>Totales por jugador</h2></div><div className="match-totals-heading-actions"><button type="button" className="button button--secondary" disabled={generatingMinutesPdf || !scopedMatches.length} onClick={() => { setGeneratingMinutesPdf(true); void generateMinutesPdf(players, scopedMatches, matchScopeLabel(scope)).finally(() => setGeneratingMinutesPdf(false)); }}><FileDown size={17} /> {generatingMinutesPdf ? 'Creando…' : 'Informe PDF'}</button><span className="count-badge count-badge--blue">{scopedMatches.length}</span></div></div>
             {totals.length ? <div className="table-scroll"><table><thead><tr><th>Dorsal</th><th>Jugador</th><th>Conv.</th><th>Tit.</th><th>PJ</th><th>Minutos</th><th>Goles</th><th>TA</th><th>TR</th></tr></thead><tbody>{totals.map((item) => { const warning = item.yellowCards > 0 && (item.yellowCards % 5 === 4 || item.yellowCards % 5 === 0); return <tr key={item.player.id} className={warning ? 'discipline-warning-row' : ''}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong>{warning && <small className="discipline-warning"><AlertTriangle size={13} /> Alerta por acumulación</small>}</td><td>{item.callUps}</td><td>{item.starts}</td><td>{item.appearances}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td><td><strong>{item.yellowCards}</strong></td><td><strong>{item.redCards}</strong></td></tr>; })}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin actas registradas</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
-            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {typeLabel(match.type)} · {match.durationMinutes} min</small></div><span><strong>{match.minutes.filter((item) => item.calledUp).length}</strong><small>convocados</small></span><span className="recent-match-actions"><button type="button" onClick={() => editMatch(match)} disabled={saving} aria-label={`Editar partido contra ${match.opponent}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => { if (window.confirm(`¿Eliminar el partido contra ${match.opponent}? Esta acción no se puede deshacer.`)) void onDelete(match.id); }} disabled={saving} aria-label={`Eliminar partido contra ${match.opponent}`}><Trash2 size={16} /></button></span></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
+            {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {matchStageLabel(getMatchStage(match))} · {typeLabel(match.type)} · {match.durationMinutes} min</small></div><span><strong>{match.minutes.filter((item) => item.calledUp).length}</strong><small>convocados</small></span><span className="recent-match-actions"><button type="button" onClick={() => editMatch(match)} disabled={saving} aria-label={`Editar partido contra ${match.opponent}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => { if (window.confirm(`¿Eliminar el partido contra ${match.opponent}? Esta acción no se puede deshacer.`)) void onDelete(match.id); }} disabled={saving} aria-label={`Eliminar partido contra ${match.opponent}`}><Trash2 size={16} /></button></span></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
         </div>
-      </section> : <section className="match-rankings" aria-label="Estadísticas de partidos">
+      </section> : <section aria-label="Estadísticas de partidos">
+        <MatchScopeControl scope={scope} onChange={setScope} count={scopedMatches.length} />
+        <div className="match-rankings">
         <article className="panel-card ranking-card ranking-card--scorers"><div className="ranking-heading"><span><Goal /></span><div><p className="eyebrow eyebrow--dark">Top 5</p><h2>Máximos goleadores</h2></div></div><RankingList items={rankings.scorers} value={(item) => item.goals} suffix="goles" podium /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><UsersRound /></span><div><p className="eyebrow eyebrow--dark">Top 18</p><h2>Más convocados</h2></div></div><RankingList items={rankings.callUps} value={(item) => item.callUps} suffix="conv." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Star /></span><div><p className="eyebrow eyebrow--dark">Top 11</p><h2>Más titularidades</h2></div></div><RankingList items={rankings.starters} value={(item) => item.starts} suffix="tit." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Clock3 /></span><div><p className="eyebrow eyebrow--dark">Top 5</p><h2>Más minutos</h2></div></div><RankingList items={rankings.minutes} value={(item) => item.minutes} suffix="min" /></article>
-        <article className="panel-card ranking-card discipline-ranking"><div className="ranking-heading"><span><ShieldAlert /></span><div><p className="eyebrow eyebrow--dark">Disciplina</p><h2>Alarmas por tarjetas</h2></div></div>{rankings.discipline.length ? <div className="discipline-ranking-list">{rankings.discipline.map((item) => <div key={item.player.id}><strong>{item.player.name}</strong><span><i className="card-mark card-mark--yellow" /> {item.yellowCards} TA</span>{item.redCards > 0 && <span><i className="card-mark card-mark--red" /> {item.redCards} TR</span>}<small>{item.yellowCards % 5 === 4 ? 'A una amarilla de sanción' : 'Revisar posible sanción'}</small></div>)}</div> : <div className="ranking-empty"><ShieldAlert size={28} /><p>Sin alarmas por acumulación</p></div>}</article>
+        <article className="panel-card ranking-card discipline-ranking"><div className="ranking-heading"><span><ShieldAlert /></span><div><p className="eyebrow eyebrow--dark">Disciplina · {matchScopeLabel(scope)}</p><h2>Alarmas por tarjetas</h2></div></div>{rankings.discipline.length ? <div className="discipline-ranking-list">{rankings.discipline.map((item) => <div key={item.player.id}><strong>{item.player.name}</strong><span><i className="card-mark card-mark--yellow" /> {item.yellowCards} TA</span>{item.redCards > 0 && <span><i className="card-mark card-mark--red" /> {item.redCards} TR</span>}<small>{item.yellowCards % 5 === 4 ? 'A una amarilla de sanción' : 'Revisar posible sanción'}</small></div>)}</div> : <div className="ranking-empty"><ShieldAlert size={28} /><p>Sin alarmas por acumulación</p></div>}</article>
+        </div>
       </section>}
     </main>
   );
+}
+
+function MatchScopeControl({ scope, onChange, count }: { scope: MatchScope; onChange: (scope: MatchScope) => void; count: number }) {
+  return <div className="match-scope-control"><span><strong>Datos mostrados:</strong> las tarjetas y los acumulados se calculan solo para esta fase.</span><label>Periodo<select value={scope} onChange={(event) => onChange(event.target.value as MatchScope)}><option value="league">Liga</option><option value="preseason">Pretemporada</option><option value="all">Todo el historial</option></select></label><span className="count-badge count-badge--blue">{count}</span></div>;
 }
 
 type TotalRow = { player: Player; callUps: number; starts: number; appearances: number; minutes: number; goals: number; yellowCards: number; redCards: number };

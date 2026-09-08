@@ -130,6 +130,7 @@ El informe contiene:
 - Medias, máximos y evolución frente a las cuatro semanas anteriores.
 - Resumen de asistencia, retrasos y ausencias.
 - Convocatorias, titularidades, minutos, goles y tarjetas.
+- Separación entre **Liga** y **Pretemporada**: el historial anterior se conserva, pero los acumulados y las alertas de tarjetas de liga empiezan desde cero.
 - Un análisis automático personal con los umbrales configurados en la hoja.
 
 Para activarlo después de actualizar y autorizar Apps Script:
