@@ -131,14 +131,17 @@ El informe contiene:
 - Resumen de asistencia, retrasos y ausencias.
 - Convocatorias, titularidades, minutos, goles y tarjetas.
 - Separación entre **Liga** y **Pretemporada**: el historial anterior se conserva, pero los acumulados y las alertas de tarjetas de liga empiezan desde cero.
+- Acumulados personales de **Liga** (minutos, goles, amarillas y rojas), con aviso de apercibimiento a una tarjeta del siguiente ciclo de sanción.
+- La infografía de planificación de la semana en curso, incrustada en el correo y adjunta como imagen cuando se haya configurado.
 - Un análisis automático personal con los umbrales configurados en la hoja.
 
 Para activarlo después de actualizar y autorizar Apps Script:
 
 1. Ejecute **Zabal Performance > Preparar estructura** para añadir la configuración necesaria.
 2. Compruebe que los jugadores han completado `correo_electronico` en su ficha mediante la aplicación.
-3. Pulse **Zabal Performance > Activar correos semanales** y confirme la autorización solicitada por Google.
-4. El envío se ejecutará los lunes entre las 08:00 y las 09:00, usando la zona horaria `Europe/Madrid`.
+3. Cada domingo o lunes, suba la infografía actual a Google Drive y pulse **Zabal Performance > Configurar infografía semanal** para pegar su enlace. Si se configura el domingo, queda asociada automáticamente a la semana que comienza al día siguiente; una imagen antigua nunca se reutiliza en semanas posteriores.
+4. Pulse **Zabal Performance > Activar correos semanales** y confirme las autorizaciones de Google para Drive y correo.
+5. El envío se ejecutará los lunes entre las 08:00 y las 09:00, usando la zona horaria `Europe/Madrid`. El análisis individual corresponde a la semana anterior y la infografía muestra la planificación de la semana que comienza.
 
 El proceso registra internamente qué jugadores han recibido cada periodo para impedir correos duplicados si el disparador se repite. Puede detenerse desde **Zabal Performance > Desactivar correos semanales**.
 

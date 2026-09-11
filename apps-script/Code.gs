@@ -34,6 +34,9 @@ function onOpen() {
     .addItem('Generar PINs de jugadores', 'generatePlayerPinsFromUi')
     .addItem('Aplicar PINs editados', 'applyPlayerPinsFromUi')
     .addSeparator()
+    .addItem('Configurar infografía semanal', 'configureWeeklyInfographicFromUi')
+    .addItem('Quitar infografía semanal', 'clearWeeklyInfographicFromUi')
+    .addSeparator()
     .addItem('Activar correos semanales', 'enableWeeklyPlayerEmailsFromUi')
     .addItem('Desactivar correos semanales', 'disableWeeklyPlayerEmailsFromUi')
     .addToUi();
@@ -71,7 +74,7 @@ function initializePlayerPins() {
 }
 
 function doGet() {
-  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 8 } });
+  return json_({ ok: true, data: { service: 'Zabal Performance API', version: 9 } });
 }
 
 function doPost(event) {
@@ -599,6 +602,47 @@ function disableWeeklyPlayerEmailsFromUi() {
   ui.alert('Los correos semanales han quedado desactivados.');
 }
 
+function configureWeeklyInfographicFromUi() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    'Infografía de la semana',
+    'Pega el enlace de Google Drive de la infografía que se enviará a los jugadores. Si lo haces el domingo, se asignará a la semana que comienza al día siguiente.',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    const fileId = driveFileId_(response.getResponseText());
+    const file = DriveApp.getFileById(fileId);
+    const mimeType = String(file.getMimeType() || '');
+    if (!/^image\/(png|jpeg|jpg|gif|webp)$/i.test(mimeType)) {
+      throw new Error('El archivo debe ser una imagen PNG, JPG, GIF o WebP.');
+    }
+    const range = planningWeekRange_(new Date());
+    PropertiesService.getScriptProperties().setProperties({
+      WEEKLY_INFOGRAPHIC_FILE_ID: fileId,
+      WEEKLY_INFOGRAPHIC_WEEK_START: range.startKey,
+      WEEKLY_INFOGRAPHIC_FILE_NAME: file.getName(),
+    });
+    ui.alert(
+      'Infografía configurada',
+      'Se incluirá «' + file.getName() + '» en los informes de la semana ' + weeklyPeriodLabel_(range.startKey, range.endKey) + '.',
+      ui.ButtonSet.OK
+    );
+  } catch (error) {
+    ui.alert('No se pudo configurar', error.message || String(error), ui.ButtonSet.OK);
+  }
+}
+
+function clearWeeklyInfographicFromUi() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert('Quitar infografía semanal', '¿Quieres impedir que la infografía configurada se incluya en el próximo correo?', ui.ButtonSet.YES_NO);
+  if (response !== ui.Button.YES) return;
+  PropertiesService.getScriptProperties().deleteProperty('WEEKLY_INFOGRAPHIC_FILE_ID');
+  PropertiesService.getScriptProperties().deleteProperty('WEEKLY_INFOGRAPHIC_WEEK_START');
+  PropertiesService.getScriptProperties().deleteProperty('WEEKLY_INFOGRAPHIC_FILE_NAME');
+  ui.alert('La infografía semanal ha quedado desvinculada.');
+}
+
 function installWeeklyPlayerEmailTrigger_() {
   deleteWeeklyPlayerEmailTriggers_();
   ScriptApp.newTrigger('sendWeeklyPlayerReports')
@@ -634,6 +678,7 @@ function sendWeeklyPlayerReports() {
     const attendance = getAttendance_({ role: 'staff' });
     const matches = getMatches_({ role: 'staff' });
     const thresholds = weeklyAnalysisThresholds_();
+    const infographic = weeklyInfographicForDate_(new Date());
     const properties = PropertiesService.getScriptProperties();
     const sentProperty = 'WEEKLY_PLAYER_REPORT_SENT_' + range.endKey;
     const sentPlayerIds = parseStringList_(properties.getProperty(sentProperty));
@@ -646,14 +691,19 @@ function sendWeeklyPlayerReports() {
         return;
       }
       try {
-        const report = buildWeeklyPlayerReport_(player, range, measurements, attendance, matches, thresholds);
-        MailApp.sendEmail({
+        const report = buildWeeklyPlayerReport_(player, range, measurements, attendance, matches, thresholds, infographic);
+        const message = {
           to: player.email,
           subject: 'Tu informe semanal · ' + report.periodLabel,
           body: report.plainText,
           htmlBody: report.html,
           name: 'Zabal Performance',
-        });
+        };
+        if (infographic) {
+          message.attachments = [infographic.blob.copyBlob().setName(infographic.fileName)];
+          message.inlineImages = { weeklyInfographic: infographic.blob.copyBlob() };
+        }
+        MailApp.sendEmail(message);
         sentPlayerIds.push(player.id);
         properties.setProperty(sentProperty, JSON.stringify(sentPlayerIds));
         remainingQuota -= 1;
@@ -675,7 +725,7 @@ function weeklyEmailPlayers_() {
   });
 }
 
-function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance, allMatches, thresholds) {
+function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance, allMatches, thresholds, infographic) {
   const measurements = allMeasurements.filter(function(item) {
     return item.playerId === player.id && item.date >= range.startKey && item.date <= range.endKey;
   }).sort(function(a, b) { return a.date.localeCompare(b.date); });
@@ -694,6 +744,7 @@ function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance,
       date: match.date,
       opponent: match.opponent,
       type: match.type,
+      stage: match.stage,
       calledUp: Boolean(entry && entry.calledUp),
       starter: Boolean(entry && entry.starter),
       minutes: entry ? Number(entry.minutes || 0) : 0,
@@ -702,6 +753,20 @@ function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance,
       redCards: entry ? Number(entry.redCards || 0) : 0,
     };
   }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+  const leagueTotals = allMatches.filter(function(match) {
+    return match.stage === 'league' && match.date <= range.endKey && match.minutes.some(function(entry) { return entry.playerId === player.id; });
+  }).reduce(function(total, match) {
+    const entry = match.minutes.find(function(item) { return item.playerId === player.id; });
+    if (!entry) return total;
+    total.matches += 1;
+    total.calledUp += Number(Boolean(entry.calledUp));
+    total.starts += Number(Boolean(entry.starter));
+    total.minutes += Number(entry.minutes || 0);
+    total.goals += Number(entry.goals || 0);
+    total.yellowCards += Number(entry.yellowCards || 0);
+    total.redCards += Number(entry.redCards || 0);
+    return total;
+  }, { matches: 0, calledUp: 0, starts: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 });
 
   const fatigueValues = numericValues_(measurements, 'fatigue');
   const sorenessValues = numericValues_(measurements, 'soreness');
@@ -735,16 +800,16 @@ function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance,
     latestWeight: latestWeight,
     weightChange: weightChange,
   };
-  const analysis = weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, thresholds);
+  const analysis = weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, leagueTotals, thresholds);
   const periodLabel = weeklyPeriodLabel_(range.startKey, range.endKey);
   return {
     periodLabel: periodLabel,
-    plainText: weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, analysis),
-    html: weeklyPlayerHtml_(player, periodLabel, measurements, playerAttendance, playerMatches, metrics, attendanceCounts, matchTotals, analysis),
+    plainText: weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, leagueTotals, analysis, infographic),
+    html: weeklyPlayerHtml_(player, periodLabel, measurements, playerAttendance, playerMatches, metrics, attendanceCounts, matchTotals, leagueTotals, analysis, infographic),
   };
 }
 
-function weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, thresholds) {
+function weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, leagueTotals, thresholds) {
   const analysis = [];
   const moderateFrom = thresholds.fatigueModerate;
   const alertFrom = thresholds.fatigueAlert;
@@ -779,10 +844,12 @@ function weeklyPlayerAnalysis_(metrics, attendanceCounts, matchTotals, threshold
   if (Number(attendanceCounts.late || 0) > 0) analysis.push('Se ha registrado al menos una llegada con retraso durante la semana.');
   if (matchTotals.minutes > 0) analysis.push('Has acumulado ' + matchTotals.minutes + ' minutos de partido esta semana' + (matchTotals.starts ? ', con ' + matchTotals.starts + (matchTotals.starts === 1 ? ' titularidad.' : ' titularidades.') : '.'));
   if (matchTotals.goals > 0) analysis.push('Has marcado ' + matchTotals.goals + (matchTotals.goals === 1 ? ' gol.' : ' goles.'));
+  const disciplinaryNotice = leagueDisciplinaryNotice_(leagueTotals);
+  if (disciplinaryNotice) analysis.push(disciplinaryNotice);
   return analysis;
 }
 
-function weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, analysis) {
+function weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, matchTotals, leagueTotals, analysis, infographic) {
   return [
     'Hola ' + firstName_(player.name) + ',',
     '',
@@ -800,6 +867,11 @@ function weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, 
     'PARTIDOS',
     matchTotals.calledUp + ' convocatorias · ' + matchTotals.starts + ' titularidades · ' + matchTotals.minutes + ' minutos · ' + matchTotals.goals + ' goles',
     '',
+    'LIGA · ACUMULADO',
+    leagueTotals.minutes + ' minutos · ' + leagueTotals.goals + ' goles · ' + leagueTotals.yellowCards + ' amarillas · ' + leagueTotals.redCards + ' rojas',
+    leagueDisciplinaryStatus_(leagueTotals),
+    '',
+    infographic ? 'PLANIFICACIÓN DE ESTA SEMANA\nLa infografía semanal va incluida como imagen y archivo adjunto.\n' : '',
     'ANÁLISIS PERSONAL',
     analysis.map(function(item) { return '• ' + item; }).join('\n'),
     '',
@@ -808,7 +880,7 @@ function weeklyPlayerPlainText_(player, periodLabel, metrics, attendanceCounts, 
   ].join('\n');
 }
 
-function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matches, metrics, attendanceCounts, matchTotals, analysis) {
+function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matches, metrics, attendanceCounts, matchTotals, leagueTotals, analysis, infographic) {
   const measurementRows = measurements.length ? measurements.map(function(item) {
     return '<tr><td style="padding:10px;border-bottom:1px solid #e6ebf0">' + escapeHtml_(shortDate_(item.date)) + '</td>' +
       '<td style="padding:10px;border-bottom:1px solid #e6ebf0;text-align:center">' + escapeHtml_(valueOrDash_(item.weight, 1, ' kg')) + '</td>' +
@@ -822,9 +894,16 @@ function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matche
   }).join('') : '<span style="color:#66778a">Sin registros de asistencia esta semana.</span>';
   const matchRows = matches.length ? matches.map(function(match) {
     const role = match.calledUp ? (match.starter ? 'Titular' : 'Convocado') : 'No convocado';
-    return '<div style="padding:11px 0;border-bottom:1px solid #e6ebf0"><strong style="color:#17375f">' + escapeHtml_(shortDate_(match.date) + ' · ' + match.opponent) + '</strong><br><span style="color:#66778a;font-size:13px">' + escapeHtml_(role + ' · ' + match.minutes + ' min · ' + match.goals + ' goles · ' + match.yellowCards + ' amarillas · ' + match.redCards + ' rojas') + '</span></div>';
+    const stage = match.stage === 'league' ? 'Liga' : 'Pretemporada';
+    return '<div style="padding:11px 0;border-bottom:1px solid #e6ebf0"><strong style="color:#17375f">' + escapeHtml_(shortDate_(match.date) + ' · ' + match.opponent) + '</strong><br><span style="color:#66778a;font-size:13px">' + escapeHtml_(stage + ' · ' + role + ' · ' + match.minutes + ' min · ' + match.goals + ' goles · ' + match.yellowCards + ' amarillas · ' + match.redCards + ' rojas') + '</span></div>';
   }).join('') : '<span style="color:#66778a">Sin datos de partido esta semana.</span>';
   const analysisItems = analysis.map(function(item) { return '<li style="margin:0 0 10px;line-height:1.55">' + escapeHtml_(item) + '</li>'; }).join('');
+  const disciplinaryStatus = leagueDisciplinaryStatus_(leagueTotals);
+  const infographicBlock = infographic
+    ? '<div style="height:28px"></div><h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Planificación de esta semana</h2>' +
+      '<p style="margin:0 0 14px;color:#66778a;font-size:13px">La misma infografía preparada para el equipo también va adjunta a este correo.</p>' +
+      '<img src="cid:weeklyInfographic" alt="Planificación semanal" style="display:block;width:100%;height:auto;border:1px solid #e6ebf0;border-radius:12px">'
+    : '';
 
   return '<!doctype html><html><body style="margin:0;padding:0;background:#eef2f6;font-family:Arial,Helvetica,sans-serif;color:#25384c">' +
     '<div style="max-width:680px;margin:0 auto;padding:24px 12px">' +
@@ -850,6 +929,16 @@ function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matche
         '<div style="height:26px"></div>' +
         '<h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Tus partidos</h2>' + matchRows +
         '<p style="margin:12px 0 0;color:#66778a;font-size:13px">' + escapeHtml_(matchTotals.calledUp + ' convocatorias · ' + matchTotals.starts + ' titularidades · ' + matchTotals.minutes + ' minutos · ' + matchTotals.goals + ' goles') + '</p>' +
+        '<div style="height:26px"></div>' +
+        '<h2 style="margin:0 0 12px;color:#16365f;font-size:18px">Liga · acumulado</h2>' +
+        '<table role="presentation" width="100%" cellspacing="8" cellpadding="0"><tr>' +
+          metricCardHtml_('Minutos', String(leagueTotals.minutes)) +
+          metricCardHtml_('Goles', String(leagueTotals.goals)) +
+          metricCardHtml_('Amarillas', String(leagueTotals.yellowCards)) +
+          metricCardHtml_('Rojas', String(leagueTotals.redCards)) +
+        '</tr></table>' +
+        '<p style="margin:10px 0 0;padding:10px 12px;border-radius:8px;background:#f6f8fa;color:#526579;font-size:13px">' + escapeHtml_(disciplinaryStatus) + '</p>' +
+        infographicBlock +
         '<div style="margin-top:28px;padding:20px;border-left:4px solid #f6ca3b;border-radius:10px;background:#fff9e5">' +
           '<h2 style="margin:0 0 13px;color:#16365f;font-size:18px">Análisis personal</h2><ul style="margin:0;padding-left:20px">' + analysisItems + '</ul>' +
         '</div>' +
@@ -860,6 +949,69 @@ function weeklyPlayerHtml_(player, periodLabel, measurements, attendance, matche
 
 function metricCardHtml_(label, value) {
   return '<td width="25%" style="padding:12px 8px;border:1px solid #e6ebf0;border-radius:10px;background:#f8fafc;text-align:center"><strong style="display:block;color:#16365f;font-size:20px">' + escapeHtml_(value) + '</strong><span style="color:#718096;font-size:11px">' + escapeHtml_(label) + '</span></td>';
+}
+
+function leagueDisciplinaryStatus_(totals) {
+  const notices = [];
+  const yellows = Number(totals.yellowCards || 0);
+  const reds = Number(totals.redCards || 0);
+  if (yellows > 0 && yellows % 5 === 4) notices.push('Apercibido: a una amarilla del siguiente ciclo de sanción.');
+  if (yellows > 0 && yellows % 5 === 0) notices.push('Revisión de sanción por acumulación de amarillas.');
+  if (reds > 0) notices.push('Revisión de sanción por tarjeta roja.');
+  return notices.length ? notices.join(' ') : 'Sin apercibimientos registrados en Liga.';
+}
+
+function leagueDisciplinaryNotice_(totals) {
+  const status = leagueDisciplinaryStatus_(totals);
+  return status === 'Sin apercibimientos registrados en Liga.' ? '' : status;
+}
+
+function driveFileId_(value) {
+  const clean = String(value || '').trim();
+  const match = clean.match(/[-\w]{25,}/);
+  if (!match) throw new Error('Pega un enlace válido de un archivo de Google Drive.');
+  return match[0];
+}
+
+function currentWeekRange_(referenceDate) {
+  const reference = new Date(referenceDate);
+  reference.setHours(12, 0, 0, 0);
+  const daysSinceMonday = (reference.getDay() + 6) % 7;
+  const start = new Date(reference);
+  start.setDate(start.getDate() - daysSinceMonday);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { startKey: dateKey_(start), endKey: dateKey_(end) };
+}
+
+function planningWeekRange_(referenceDate) {
+  const reference = new Date(referenceDate);
+  reference.setHours(12, 0, 0, 0);
+  if (reference.getDay() !== 0) return currentWeekRange_(reference);
+  const nextMonday = new Date(reference);
+  nextMonday.setDate(nextMonday.getDate() + 1);
+  return currentWeekRange_(nextMonday);
+}
+
+function weeklyInfographicForDate_(referenceDate) {
+  const properties = PropertiesService.getScriptProperties();
+  const range = currentWeekRange_(referenceDate);
+  const fileId = String(properties.getProperty('WEEKLY_INFOGRAPHIC_FILE_ID') || '');
+  const configuredWeek = String(properties.getProperty('WEEKLY_INFOGRAPHIC_WEEK_START') || '');
+  if (!fileId || configuredWeek !== range.startKey) return null;
+  try {
+    const file = DriveApp.getFileById(fileId);
+    const blob = file.getBlob();
+    if (!/^image\//i.test(String(blob.getContentType() || ''))) return null;
+    return {
+      blob: blob,
+      fileName: String(properties.getProperty('WEEKLY_INFOGRAPHIC_FILE_NAME') || file.getName() || 'planificacion-semanal.png'),
+      weekStart: range.startKey,
+    };
+  } catch (error) {
+    console.error('No se pudo cargar la infografía semanal: ' + (error && error.message ? error.message : String(error)));
+    return null;
+  }
 }
 
 function previousWeekRange_(referenceDate) {
