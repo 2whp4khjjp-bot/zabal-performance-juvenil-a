@@ -64,7 +64,8 @@ export default function App() {
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [trainingSession, setTrainingSession] = useState<TrainingSession | null>(null);
   const [matches, setMatches] = useState<MatchRecord[]>([]);
-  const [matchesLoaded, setMatchesLoaded] = useState(false);
+  const [matchesStatus, setMatchesStatus] = useState<'loading' | 'ready' | 'stale'>('loading');
+  const [matchesRefresh, setMatchesRefresh] = useState(0);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -100,6 +101,7 @@ export default function App() {
     setMeasurements([]);
     setTrainingSession(null);
     setMatches([]);
+    setMatchesStatus('loading');
     setAttendance([]);
     setAttendanceLoaded(false);
     setBirthdayState({ needsBirthDate: false, birthdaysToday: [] });
@@ -172,20 +174,34 @@ export default function App() {
   }, [auth?.token, hydratedToken]);
 
   useEffect(() => {
-    if (!auth || matchesLoaded || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
+    if (!auth || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
+    let cancelled = false;
+    let retryTimer: number | undefined;
     const cached = readMatchesCache(auth);
-    if (cached) {
-      setMatches(cached.matches);
-      setMatchesLoaded(true);
-    } else setLoading(true);
+    if (cached) setMatches(cached.matches);
+    setMatchesStatus('loading');
     dataService.getMatches(auth.token)
-      .then((nextMatches) => { setMatches(nextMatches); setMatchesLoaded(true); saveMatchesCache(auth, nextMatches); })
-      .catch((cause: Error) => {
-        if (cached) setToast('Partidos disponibles sin conexión; se actualizarán al recuperar Google');
-        else setError(cause.message || 'No se pudieron cargar los partidos.');
+      .then((nextMatches) => {
+        if (cancelled) return;
+        setMatches(nextMatches);
+        setMatchesStatus('ready');
+        saveMatchesCache(auth, nextMatches);
       })
-      .finally(() => setLoading(false));
-  }, [auth?.token, auth?.role, view, matchesLoaded]);
+      .catch((cause: Error) => {
+        if (cancelled) return;
+        if (/sesión|session|unauthorized/i.test(cause.message)) {
+          void logout();
+          return;
+        }
+        setMatchesStatus('stale');
+        // La caché permite consultar el historial, pero no confirma que esté al día.
+        retryTimer = window.setTimeout(() => setMatchesRefresh((value) => value + 1), 30000);
+      });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
+  }, [auth?.token, auth?.role, view, offline, matchesRefresh]);
 
   useEffect(() => {
     if (!auth || auth.role !== 'staff' || (view !== 'attendance' && view !== 'technical') || attendanceLoaded) return;
@@ -417,6 +433,7 @@ export default function App() {
       <AppHeader remaining={remaining} view={view} role={auth.role} playerName={auth.playerName} onViewChange={(next) => { setView(next); setSelectedPlayer(null); }} onLogout={() => void logout()} />
       {birthdayNoticeOpen && <BirthdayBanner names={birthdayState.birthdaysToday} onClose={() => setBirthdayNoticeOpen(false)} />}
       {error && <div className="global-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>Cerrar</button></div>}
+      {(view === 'matches' || view === 'technical') && matchesStatus !== 'ready' && <div className="global-error" role="status"><span>{matchesStatus === 'loading' ? 'Actualizando partidos con Google. Los acumulados todavía no están confirmados.' : 'No se pudieron actualizar los partidos. Los goleadores y demás acumulados pueden estar desactualizados. Se reintentará automáticamente.'}</span><button disabled={matchesStatus === 'loading'} onClick={() => setMatchesRefresh((value) => value + 1)}>Reintentar</button></div>}
       <PageNavigation onBack={goBack} onHome={() => window.location.assign(environment.homeUrl)} />
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
       {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
