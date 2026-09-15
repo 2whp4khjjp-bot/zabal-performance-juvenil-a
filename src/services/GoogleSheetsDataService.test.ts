@@ -24,6 +24,19 @@ describe('servicio remoto', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('tolera una lectura lenta de Google sin abortar ni repetir la petición', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url, options: RequestInit) => new Promise((resolve, reject) => {
+      options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      setTimeout(() => resolve({ ok: true, json: async () => ({ ok: true, data: [] }) }), 12000);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = new GoogleSheetsDataService('https://example.test/exec').getMatches('token');
+    await vi.advanceTimersByTimeAsync(12000);
+    await expect(pending).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('limita cada intento para no dejar la pantalla bloqueada', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {

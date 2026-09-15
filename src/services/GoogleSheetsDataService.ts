@@ -11,11 +11,11 @@ export class GoogleSheetsDataService implements DataService {
     if (!this.endpoint) throw new DataServiceError('Falta configurar la URL de Google Apps Script.', 'CONFIG');
     let response: Response | undefined;
     let serviceReached = false;
-    const isWrite = ['saveMeasurement', 'saveMatch', 'updateMatch', 'deleteMatch', 'saveAttendance', 'setPlayerInjury', 'saveBirthDate', 'saveEmail'].includes(action);
     const maxAttempts = 2;
     // Apps Script puede necesitar algo más de margen al despertar y escribir
-    // un acta completa, especialmente desde conexiones móviles.
-    const timeoutMs = isWrite ? 20000 : 8000;
+    // leer o escribir un acta completa, especialmente desde conexiones móviles.
+    // Las lecturas también necesitan margen: ocho segundos daban falsos fallos.
+    const timeoutMs = 20000;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
