@@ -1134,6 +1134,8 @@ function weeklyAnalysisThresholds_() {
 }
 
 function getMatches_(session) {
+  const cachedMatches = readMatchesApiCache_();
+  if (cachedMatches) return matchesForSession_(cachedMatches, session);
   ensureMatchSchema_();
   ensureMatchMinutesSchema_();
   const minutesByMatch = {};
@@ -1151,7 +1153,7 @@ function getMatches_(session) {
       redCards: Number(row.rojas || 0),
     });
   });
-  return rows_(SHEETS.MATCHES).map(function(row) {
+  const matches = rows_(SHEETS.MATCHES).map(function(row) {
     return {
       id: String(row.id),
       date: dateKey_(row.fecha),
@@ -1161,7 +1163,7 @@ function getMatches_(session) {
       stage: String(row.fase) === 'league' ? 'league' : 'preseason',
       opponent: String(row.rival || ''),
       durationMinutes: Number(row.duracion_minutos || 90),
-      minutes: (minutesByMatch[String(row.id)] || []).filter(function(entry) { return session.role === 'staff' || entry.playerId === String(session.playerId); }),
+      minutes: minutesByMatch[String(row.id)] || [],
       createdAt: iso_(row.creado_en),
       updatedAt: iso_(row.actualizado_en),
       createdBy: String(row.creado_por || 'cuerpo-tecnico'),
@@ -1169,6 +1171,33 @@ function getMatches_(session) {
   }).sort(function(a, b) {
     return (b.date + b.createdAt).localeCompare(a.date + a.createdAt);
   });
+  writeMatchesApiCache_(matches);
+  return matchesForSession_(matches, session);
+}
+
+function matchesForSession_(matches, session) {
+  if (session.role === 'staff') return matches;
+  return matches.map(function(match) {
+    const copy = Object.assign({}, match);
+    copy.minutes = (match.minutes || []).filter(function(entry) { return entry.playerId === String(session.playerId); });
+    return copy;
+  });
+}
+
+function readMatchesApiCache_() {
+  try {
+    const cached = CacheService.getScriptCache().get('matches-api-v1');
+    const parsed = cached ? JSON.parse(cached) : null;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) { return null; }
+}
+
+function writeMatchesApiCache_(matches) {
+  try { CacheService.getScriptCache().put('matches-api-v1', JSON.stringify(matches), 90); } catch (error) { /* La lectura directa sigue disponible. */ }
+}
+
+function invalidateMatchesApiCache_() {
+  try { CacheService.getScriptCache().remove('matches-api-v1'); } catch (error) { /* No bloquea el guardado. */ }
 }
 
 function validateMatchInput_(input, session) {
@@ -1231,6 +1260,7 @@ function saveMatch_(input, session) {
     const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
+    invalidateMatchesApiCache_();
     return {
       id: id, date: clean.date, type: clean.type, stage: clean.stage, opponent: clean.opponent, durationMinutes: clean.duration,
       minutes: clean.entries, createdAt: now.toISOString(), updatedAt: now.toISOString(), createdBy: 'cuerpo-tecnico',
@@ -1270,6 +1300,7 @@ function updateMatch_(matchId, input, session) {
     const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
+    invalidateMatchesApiCache_();
     return getMatches_({ role: 'staff' }).find(function(match) { return match.id === id; });
   } finally { lock.releaseLock(); }
 }
@@ -1320,6 +1351,7 @@ function deleteMatch_(matchId, session) {
     if (rowIndex < 0) throw apiError_('Partido no encontrado.', 'NOT_FOUND');
     matchesSheet.deleteRow(rowIndex + 2);
     deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
+    invalidateMatchesApiCache_();
     return true;
   } finally { lock.releaseLock(); }
 }

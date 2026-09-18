@@ -20,13 +20,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-it('avisa de la caché desactualizada y recupera las actas automáticamente', async () => {
+it('mantiene visible la caché y recupera las actas silenciosamente', async () => {
   remote.getMatches.mockRejectedValueOnce(new Error('No se pudo contactar con el servicio de datos.')).mockResolvedValue([{ id: 'acta-actualizada' }]);
   render(<App />);
   await act(async () => {});
   fireEvent.click(screen.getByText('Partidos'));
   await act(async () => {});
-  expect(screen.getByText(/pueden estar desactualizados/)).toBeTruthy();
+  expect(screen.queryByText(/pueden estar desactualizados/)).toBeNull();
   expect(screen.getByText('acta-antigua')).toBeTruthy();
   await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
   expect(remote.getMatches).toHaveBeenCalledTimes(2);
@@ -35,6 +35,7 @@ it('avisa de la caché desactualizada y recupera las actas automáticamente', as
 });
 
 it('permite reintentar sin recargar la página', async () => {
+  localStorage.removeItem('zabal-matches-v1-staff-staff');
   remote.getMatches.mockRejectedValueOnce(new Error('NETWORK')).mockResolvedValue([]);
   render(<App />);
   await act(async () => {});

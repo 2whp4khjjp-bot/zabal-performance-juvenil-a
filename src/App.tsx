@@ -123,6 +123,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!auth || auth.role !== 'staff') return;
+    const preload = window.setTimeout(() => {
+      // Descarga los módulos pesados cuando el navegador está libre para que
+      // el primer toque en Partidos, Asistencia o Panel técnico sea inmediato.
+      void Promise.all([
+        import('./components/MatchesPanel'),
+        import('./components/AttendancePanel'),
+        import('./components/TechnicalPanel'),
+      ]);
+    }, 400);
+    return () => window.clearTimeout(preload);
+  }, [auth?.token, auth?.role]);
+
+  useEffect(() => {
     if (!auth || hydratedToken === auth.token) return;
     const update = () => {
       const seconds = remainingSeconds(auth.expiresAt);
@@ -174,12 +188,19 @@ export default function App() {
   }, [auth?.token, hydratedToken]);
 
   useEffect(() => {
-    if (!auth || (auth.role === 'staff' && view !== 'matches' && view !== 'technical')) return;
+    if (!auth) return;
     let cancelled = false;
     let retryTimer: number | undefined;
     const cached = readMatchesCache(auth);
-    if (cached) setMatches(cached.matches);
-    setMatchesStatus('loading');
+    if (cached) {
+      setMatches(cached.matches);
+      // La copia local ya permite trabajar. Google se actualiza por detrás sin
+      // bloquear la pantalla ni pedir al usuario que pulse varias veces.
+      setMatchesStatus('ready');
+    } else {
+      setMatchesStatus(offline ? 'stale' : 'loading');
+    }
+    if (offline) return;
     dataService.getMatches(auth.token)
       .then((nextMatches) => {
         if (cancelled) return;
@@ -193,15 +214,16 @@ export default function App() {
           void logout();
           return;
         }
-        setMatchesStatus('stale');
-        // La caché permite consultar el historial, pero no confirma que esté al día.
+        setMatchesStatus(cached ? 'ready' : 'stale');
+        // Con copia local el reintento es invisible; sin copia se mantiene el
+        // aviso para no presentar acumulados vacíos como si fueran definitivos.
         retryTimer = window.setTimeout(() => setMatchesRefresh((value) => value + 1), 30000);
       });
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
     };
-  }, [auth?.token, auth?.role, view, offline, matchesRefresh]);
+  }, [auth?.token, auth?.role, offline, matchesRefresh]);
 
   useEffect(() => {
     if (!auth || auth.role !== 'staff' || (view !== 'attendance' && view !== 'technical') || attendanceLoaded) return;
