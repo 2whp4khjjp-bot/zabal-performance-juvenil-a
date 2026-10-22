@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from './App';
 
-const remote = vi.hoisted(() => ({ getBootstrap: vi.fn(), getMeasurements: vi.fn(), getMatches: vi.fn(), logout: vi.fn() }));
+const remote = vi.hoisted(() => ({ getTeamSettings: vi.fn().mockResolvedValue({}), getBootstrap: vi.fn(), getMeasurements: vi.fn(), getMatches: vi.fn(), logout: vi.fn() }));
 vi.mock('./services', () => ({ dataService: remote }));
 vi.mock('./components/AppHeader', () => ({ AppHeader: ({ onViewChange }: { onViewChange: (view: string) => void }) => <button onClick={() => onViewChange('matches')}>Partidos</button> }));
 vi.mock('./components/MatchesPanel', () => ({ MatchesPanel: ({ matches }: { matches: { id: string }[] }) => <div>{matches.map((match) => match.id).join(',')}</div> }));

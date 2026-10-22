@@ -1,3 +1,4 @@
+import type { TeamSettings } from '../utils/teamSettings';
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
@@ -32,6 +33,10 @@ const readJson = <T>(key: string, fallback: T): T => {
 };
 
 export class LocalDataService implements DataService {
+  async getTeamSettings(token: string): Promise<TeamSettings> { this.requireSession(token); return JSON.parse(localStorage.getItem('zabal-team-settings') || 'null') || { profile: 'football11', weight: true, fatigue: true, soreness: true, injuries: true, attendance: true, matches: true, cards: true }; }
+  async saveTeamSettings(token: string, settings: TeamSettings) { const auth = this.requireSession(token); if (auth.role !== 'staff') throw new DataServiceError('Acceso reservado al cuerpo técnico.', 'FORBIDDEN'); localStorage.setItem('zabal-team-settings', JSON.stringify(settings)); return settings; }
+  async emailAttendance(_token: string, _email: string, _pdfBase64: string, _periodLabel: string, _requestId: string): Promise<boolean> { throw new DataServiceError('El envío de correo requiere conexión al servicio del equipo.', 'CONFIG'); }
+
   private sessions = new Map<string, AuthSession>();
 
   private requireSession(token: string) {
@@ -243,9 +248,10 @@ export class LocalDataService implements DataService {
       return { playerId: player.id, playerName: player.name, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards };
     });
     if (!minutes.some((entry) => entry.calledUp)) throw new DataServiceError('Marca como convocado al menos a un jugador.', 'VALIDATION');
-    if (minutes.filter((entry) => entry.starter).length > appConfig.maxStarters) throw new DataServiceError(`No puedes marcar más de ${appConfig.maxStarters} titulares.`, 'VALIDATION');
+    if (minutes.filter((entry) => entry.starter).length > ((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)) throw new DataServiceError(`No puedes marcar más de ${((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)} titulares.`, 'VALIDATION');
     const now = new Date().toISOString();
     const match: MatchRecord = {
+      referee: input.referee, goalsFor: input.goalsFor, goalsAgainst: input.goalsAgainst, incidents: input.incidents, captainId: input.captainId,
       id: crypto.randomUUID(), date: input.date, type: input.type, stage: input.stage, opponent,
       durationMinutes: input.durationMinutes, minutes, createdAt: now, updatedAt: now, createdBy: 'cuerpo-tecnico',
     };

@@ -1,3 +1,4 @@
+import { TeamConfiguration } from './TeamConfiguration';
 import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownAZ, CalendarDays, Download, FileDown, Filter, Search, ShieldX, TrendingUp, UsersRound } from 'lucide-react';
 import type { AlertLevel, AttendanceRecord, MatchRecord, Measurement, Player, ReportKind } from '../types';
@@ -75,6 +76,7 @@ export function TechnicalPanel({ players, measurements, matches, attendance }: {
 
   return (
     <main className="page-shell technical-page">
+      <TeamConfiguration />
       <div className="page-heading technical-heading">
         <div><p className="eyebrow eyebrow--dark">Datos y seguimiento</p><h1>Panel técnico</h1><p>Resumen de la sesión, alertas, tendencias e informes.</p></div>
         <div className="export-actions">

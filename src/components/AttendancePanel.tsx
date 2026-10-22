@@ -1,3 +1,4 @@
+import { AttendanceExports } from './AttendanceExports';
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarDays, CheckCircle2, Clock3, Save, Search, UserCheck } from 'lucide-react';
 import type { AttendanceInput, AttendanceRecord, AttendanceStatus, Measurement, Player } from '../types';
@@ -72,6 +73,7 @@ export function AttendancePanel({ players, measurements, attendance, saving, onS
         <div className="attendance-counts"><span><strong>{counts.present + counts.late + counts.individual}</strong> asistentes</span><span><strong>{counts.pending}</strong> pendientes</span><span><strong>{counts.justified + counts.unjustified + counts.medical}</strong> ausencias</span></div>
       </section>
       <div className="search-field attendance-search"><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar jugador…" aria-label="Buscar jugador en asistencia" /></div>
+      <AttendanceExports players={roster} records={attendance.filter((record) => record.date === date)} label={date} />
       <section className="panel-card attendance-list-card">
         <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">{formatDate(date)}</p><h2>Estado de la plantilla</h2></div><small>{roster.length} jugadores</small></div>
         <div className="attendance-list">
@@ -92,6 +94,7 @@ export function AttendancePanel({ players, measurements, attendance, saving, onS
         <div><p className="eyebrow eyebrow--dark">PERIODO</p><h2>Resumen de asistencia</h2></div>
         <div className="attendance-period-buttons">{(Object.keys(attendancePeriodLabels) as AttendancePeriod[]).map((value) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)}>{attendancePeriodLabels[value]}</button>)}</div>
       </section>
+      <AttendanceExports players={roster} records={filteredRecords} label={attendancePeriodLabels[period]} />
       <section className="panel-card attendance-summary-card">
         <div className="attendance-summary-metrics"><span><strong>{summary.sessionCount}</strong> entrenamientos</span><span><strong>{summary.averagePercent}%</strong> asistencia media</span><span><strong>{summary.perfectCount}</strong> jugadores al 100%</span></div>
         <div className="table-wrap"><table className="attendance-summary-table"><thead><tr><th>Dorsal</th><th>Jugador</th><th>Asistencias</th><th>Ausencias</th><th>Porcentaje</th></tr></thead><tbody>{summary.rows.map((row) => <tr key={row.playerId}><td>{row.number}</td><td><strong>{row.playerName}</strong></td><td>{row.attended} / {summary.sessionCount}</td><td>{row.absences}</td><td><div className={`attendance-rate ${row.percent < 80 ? 'attendance-rate--low' : ''}`}><span>{row.percent}%</span><i><b style={{ width: `${row.percent}%` }} /></i></div></td></tr>)}</tbody></table></div>

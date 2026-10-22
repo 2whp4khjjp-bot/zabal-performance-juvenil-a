@@ -1,3 +1,4 @@
+import { setTeamSettings } from './utils/teamSettings';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, EmailState, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
 import { dataService } from './services';
@@ -59,6 +60,7 @@ const saveAttendanceCache = (auth: AuthSession, attendance: AttendanceRecord[]) 
 
 export default function App() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readAuthSession());
+  useEffect(() => { if (!auth) return; let cancelled = false; dataService.getTeamSettings(auth.token).then((settings) => { if (!cancelled) setTeamSettings(settings); }).catch(() => undefined); return () => { cancelled = true; }; }, [auth?.token]);
   const [remaining, setRemaining] = useState(() => auth ? remainingSeconds(auth.expiresAt) : 0);
   const [players, setPlayers] = useState<Player[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
