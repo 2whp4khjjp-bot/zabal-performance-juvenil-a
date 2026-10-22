@@ -1,5 +1,4 @@
 import { expect, it } from 'vitest';
-import { writeFileSync } from 'node:fs';
 import { createAttendanceDocument, createMatchDocument } from '../src/services/teamDocuments';
 import type { AttendanceRecord, MatchRecord, Player } from '../src/types';
 it('pagina las plantillas largas y conserva el resultado, capitán e incidencias', async () => {
@@ -10,6 +9,4 @@ it('pagina las plantillas largas y conserva el resultado, capitán e incidencias
   const m = await createMatchDocument(match, players);
   expect(a.getNumberOfPages()).toBeGreaterThan(0); expect(m.getNumberOfPages()).toBeGreaterThan(1);
   expect(m.output()).toContain('0 - 0'); expect(m.output()).toContain('Raul Cote');
-  writeFileSync('/private/tmp/zabal-asistencia-prueba.pdf', Buffer.from(a.output('arraybuffer')));
-  writeFileSync('/private/tmp/zabal-partido-prueba.pdf', Buffer.from(m.output('arraybuffer')));
 });
