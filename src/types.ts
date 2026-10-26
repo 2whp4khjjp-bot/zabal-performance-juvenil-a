@@ -10,6 +10,8 @@ export type Player = {
   staffMember?: boolean;
 };
 
+export type PlayerInput = { name: string; number?: number };
+
 export type InjuryPeriod = {
   id: string;
   startDate: string;
@@ -142,6 +144,8 @@ export type MatchStage = 'preseason' | 'league';
 export type MatchMinutes = {
   playerId: string;
   playerName: string;
+  /** Dorsal que llevaba en este partido; no cambia al editar la plantilla. */
+  number?: number | null;
   calledUp?: boolean;
   starter?: boolean;
   minutes: number;
