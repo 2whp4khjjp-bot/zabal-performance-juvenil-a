@@ -15,6 +15,12 @@ function service() {
   return { context, send, values, triggers };
 }
 describe('configuración y documentos del equipo', () => {
+  it('conserva el dorsal antiguo hasta que se guarde uno nuevo o se quite expresamente', () => {
+    const { context } = service();
+    expect(context.legacyPlayerNumber_('Jairo Muñoz', '')).toBe(2);
+    expect(context.legacyPlayerNumber_('Jairo Muñoz', 32)).toBe(32);
+    expect(context.legacyPlayerNumber_('Jairo Muñoz', 0)).toBeUndefined();
+  });
   it('rechaza cambios de configuración realizados por un jugador', () => {
     const { context } = service(); expect(() => context.saveTeamSettings_({ ...context.defaultTeamSettings_(), profile: 'football7' }, { role: 'player' })).toThrow();
   });
