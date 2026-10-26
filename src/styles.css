@@ -380,6 +380,9 @@ tbody tr:hover { background: #f8fafc; }
 .match-stat-input small { position: absolute; top: 50%; right: 9px; transform: translateY(-50%); color: var(--muted); font-size: .7rem; pointer-events: none; }
 .match-card-input { display: flex; align-items: center; gap: 5px; }
 .match-card-input input { width: 35px; height: 40px; padding: 0; border: 1px solid #cbd6e1; border-radius: 8px; color: var(--navy); text-align: center; background: #fff; font-weight: 800; }
+.match-discipline-details { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; color: #526174; font-size: .73rem; }
+.match-discipline-details label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.match-discipline-details input { accent-color: #173961; width: 16px; height: 16px; }
 .match-called-up { display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-weight: 800; cursor: pointer; }
 .match-called-up input { position: absolute; opacity: 0; }
 .match-called-up > svg { width: 29px; height: 29px; padding: 6px; border: 1px solid #cbd6e1; border-radius: 8px; color: transparent; background: #fff; }
@@ -664,15 +667,16 @@ tbody tr:hover { background: #f8fafc; }
   .injury-form-control .switch-control { grid-column: 1 / -1; justify-self: end; }
   .injury-date-fields { grid-template-columns: 1fr; }
   .injury-date-fields .injury-reason-field { grid-column: 1; }
-  .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 44px 44px 44px 44px; grid-template-areas: 'number name name called starter minutes' '. . goals yellow red .'; row-gap: 7px; }
+  .match-player-row { padding: 10px 0; grid-template-columns: 34px minmax(0, 1fr) 44px 44px 44px 44px; grid-template-areas: 'number name name called starter minutes' '. . goals yellow red .' 'details details details details details details'; row-gap: 7px; }
   .match-player-number { grid-area: number; }
   .match-player-name { grid-area: name; }
   .match-called-up { grid-area: called; }
   .match-starter { grid-area: starter; }
   .match-stat-input { grid-area: minutes; }
   .match-goal-input { grid-area: goals; justify-self: end; }
-  .match-player-row .match-card-input:nth-last-child(2) { grid-area: yellow; }
-  .match-player-row .match-card-input:last-child { grid-area: red; }
+  .match-yellow-input { grid-area: yellow; }
+  .match-red-input { grid-area: red; }
+  .match-discipline-details { grid-area: details; grid-column: 1 / -1; }
   .login-intro { min-height: 46vh; }
   .login-intro__copy { font-size: 1rem; }
   .form-heading h1 { font-size: 1.7rem; }
