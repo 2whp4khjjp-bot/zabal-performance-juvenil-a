@@ -7,6 +7,7 @@ import { average, parseWeight, recentForPlayer, weightChange } from '../utils/me
 import { Sparkline } from './Sparkline';
 import { injuryPeriodDays, playerIsInjuredOn, totalInjuryDays } from '../utils/injuries';
 import { matchesInScope } from '../utils/matches';
+import { disciplineForPlayer } from '../utils/discipline';
 
 type FormProps = {
   player: Player;
@@ -121,11 +122,8 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
   };
 
   const change = weightChange(history);
-  const discipline = matchesInScope(matches, 'league').reduce((totals, match) => {
-    const entry = match.minutes.find((item) => item.playerId === player.id);
-    return { yellow: totals.yellow + (entry?.yellowCards ?? 0), red: totals.red + (entry?.redCards ?? 0) };
-  }, { yellow: 0, red: 0 });
-  const sanctionWarning = discipline.yellow > 0 && discipline.yellow % 5 === 4;
+  const discipline = disciplineForPlayer(matchesInScope(matches, 'league'), player.id);
+  const sanctionWarning = discipline.accumulationYellowCards > 0 && discipline.accumulationYellowCards % 5 === 4;
 
   return (
     <main className="page-shell form-page">
@@ -134,10 +132,11 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         <div className="player-avatar">{player.number ?? '—'}</div>
         <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(measurementDate)}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando una medición existente</span>}</div>
       </div>
-      {(discipline.yellow > 0 || discipline.red > 0) && <section data-feature="cards" className={`discipline-profile-alert ${sanctionWarning ? 'discipline-profile-alert--danger' : ''}`}>
-        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellow} amarillas de liga</strong>
-        <span className="card-mark card-mark--red" /> <strong>{discipline.red} rojas de liga</strong>
-        {sanctionWarning && <em>Alerta: a una amarilla de sanción</em>}
+      {(discipline.yellowCards > 0 || discipline.redCards > 0 || discipline.suspensionMatches.length > 0) && <section data-feature="cards" className={`discipline-profile-alert ${sanctionWarning ? 'discipline-profile-alert--danger' : ''}`}>
+        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellowCards} amarillas registradas · {discipline.accumulationYellowCards} para acumulación</strong>
+        <span className="card-mark card-mark--red" /> <strong>{discipline.redCards} rojas de liga</strong>
+        {discipline.suspensionMatches.length > 0 && <em>Sanción cumplida (registro manual): {discipline.suspensionMatches.map((item) => `${item.date} · ${item.opponent}`).join(', ')}</em>}
+        {sanctionWarning && <em>Revisar acumulación de amarillas</em>}
       </section>}
 
       {role === 'staff' && <section data-feature="injuries" className={`injury-form-control injury-period-control ${player.injured ? 'injury-form-control--active' : ''}`}>
