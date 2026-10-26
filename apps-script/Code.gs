@@ -22,7 +22,7 @@ const HEADERS = {
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por', 'fase'],
-  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular', 'dorsal'],
+  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular', 'dorsal', 'amarillas_expulsion', 'sancion_cumplida'],
   Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'motivo', 'creado_en', 'actualizado_en'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'minutos_retraso', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
@@ -886,9 +886,11 @@ function buildWeeklyPlayerReport_(player, range, allMeasurements, allAttendance,
     total.minutes += Number(entry.minutes || 0);
     total.goals += Number(entry.goals || 0);
     total.yellowCards += Number(entry.yellowCards || 0);
+    total.expulsionYellowCards += Number(entry.expulsionYellowCards || 0);
     total.redCards += Number(entry.redCards || 0);
+    total.suspensionServed += Number(Boolean(entry.suspensionServed));
     return total;
-  }, { matches: 0, calledUp: 0, starts: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 });
+  }, { matches: 0, calledUp: 0, starts: 0, minutes: 0, goals: 0, yellowCards: 0, expulsionYellowCards: 0, redCards: 0, suspensionServed: 0 });
 
   const fatigueValues = numericValues_(measurements, 'fatigue');
   const sorenessValues = numericValues_(measurements, 'soreness');
@@ -1075,17 +1077,18 @@ function metricCardHtml_(label, value) {
 
 function leagueDisciplinaryStatus_(totals) {
   const notices = [];
-  const yellows = Number(totals.yellowCards || 0);
+  const yellows = Number(totals.yellowCards || 0) - Number(totals.expulsionYellowCards || 0);
   const reds = Number(totals.redCards || 0);
-  if (yellows > 0 && yellows % 5 === 4) notices.push('Apercibido: a una amarilla del siguiente ciclo de sanción.');
-  if (yellows > 0 && yellows % 5 === 0) notices.push('Revisión de sanción por acumulación de amarillas.');
-  if (reds > 0) notices.push('Revisión de sanción por tarjeta roja.');
-  return notices.length ? notices.join(' ') : 'Sin apercibimientos registrados en Liga.';
+  if (Number(totals.expulsionYellowCards || 0) > 0) notices.push(yellows + ' amarillas para el acumulado de revisión; ' + totals.yellowCards + ' registradas en acta.');
+  if (yellows >= 4) notices.push('Revisar acumulación de amarillas.');
+  if (reds > 0) notices.push('Roja registrada: revisar con el delegado.');
+  if (Number(totals.suspensionServed || 0) > 0) notices.push('Sanción cumplida en ' + totals.suspensionServed + ' partido(s), según marca manual del acta.');
+  return notices.length ? notices.join(' ') : 'Sin alertas disciplinarias registradas en Liga.';
 }
 
 function leagueDisciplinaryNotice_(totals) {
   const status = leagueDisciplinaryStatus_(totals);
-  return status === 'Sin apercibimientos registrados en Liga.' ? '' : status;
+  return status === 'Sin alertas disciplinarias registradas en Liga.' ? '' : status;
 }
 
 function driveFileId_(value) {
@@ -1274,6 +1277,8 @@ function getMatches_(session) {
       goals: Number(row.goles || 0),
       yellowCards: Number(row.amarillas || 0),
       redCards: Number(row.rojas || 0),
+      expulsionYellowCards: Number(row.amarillas_expulsion || 0),
+      suspensionServed: boolean_(row.sancion_cumplida),
     });
   });
   const matches = rows_(SHEETS.MATCHES).map(function(row) {
@@ -1354,15 +1359,19 @@ function validateMatchInput_(input, session) {
     const goals = Number(entry.goals || 0);
     const yellowCards = Number(entry.yellowCards || 0);
     const redCards = Number(entry.redCards || 0);
+    const expulsionYellowCards = Number(entry.expulsionYellowCards || 0);
+    const suspensionServed = Boolean(entry.suspensionServed);
     if (!player || player.name !== String(entry.playerName || '') || seen[playerId]) throw apiError_('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > duration) throw apiError_('Los minutos de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw apiError_('Los goles de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw apiError_('Las amarillas de ' + player.name + ' no son válidas.', 'VALIDATION');
     if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw apiError_('Las rojas de ' + player.name + ' no son válidas.', 'VALIDATION');
+    if (!Number.isInteger(expulsionYellowCards) || expulsionYellowCards < 0 || expulsionYellowCards > yellowCards || expulsionYellowCards > redCards) throw apiError_('Revisa las amarillas vinculadas a la expulsión de ' + player.name + '.', 'VALIDATION');
+    if (suspensionServed && (calledUp || starter || minutes || goals || yellowCards || redCards)) throw apiError_(player.name + ' no puede cumplir sanción y participar en el mismo partido.', 'VALIDATION');
     if (!calledUp && (starter || minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
     seen[playerId] = true;
     const number = entry.number === null || entry.number === 0 ? null : Number.isInteger(Number(entry.number)) && Number(entry.number) >= 1 && Number(entry.number) <= 99 ? Number(entry.number) : player.number;
-    return { playerId: player.id, playerName: player.name, number: number, calledUp: calledUp, starter: starter, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
+    return { playerId: player.id, playerName: player.name, number: number, calledUp: calledUp, starter: starter, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards, expulsionYellowCards: expulsionYellowCards, suspensionServed: suspensionServed };
   });
   if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
   if (cleanEntries.filter(function(entry) { return entry.starter; }).length > (getTeamSettings_().profile === 'football7' ? 7 : 11)) throw apiError_('No puedes marcar más de ' + (getTeamSettings_().profile === 'football7' ? 7 : 11) + ' titulares.', 'VALIDATION');
@@ -1383,7 +1392,7 @@ function saveMatch_(input, session) {
     const id = requestedId || Utilities.getUuid();
     const now = new Date();
     ensureMatchSchema_().appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico', clean.stage]);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number]; });
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number, entry.expulsionYellowCards, entry.suspensionServed]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     invalidateMatchesApiCache_();
@@ -1423,7 +1432,7 @@ function updateMatch_(matchId, input, session) {
       return '';
     })]);
     deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number]; });
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number, entry.expulsionYellowCards, entry.suspensionServed]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     invalidateMatchesApiCache_();
@@ -1454,8 +1463,13 @@ function deleteRowsByMatchId_(targetSheet, matchId) {
 function ensureMatchMinutesSchema_() {
   const targetSheet = sheet_(SHEETS.MATCH_MINUTES);
   const headers = targetSheet.getRange(1, 1, 1, Math.max(1, targetSheet.getLastColumn())).getValues()[0].map(String);
-  if (headers.indexOf('titular') < 0) targetSheet.getRange(1, headers.length + 1).setValue('titular');
-  if (headers.indexOf('dorsal') < 0) targetSheet.getRange(1, targetSheet.getLastColumn() + 1).setValue('dorsal');
+  ['titular', 'dorsal', 'amarillas_expulsion', 'sancion_cumplida'].forEach(function(header) {
+    if (headers.indexOf(header) >= 0) return;
+    const nextColumn = targetSheet.getLastColumn() + 1;
+    if (nextColumn > targetSheet.getMaxColumns()) targetSheet.insertColumnAfter(targetSheet.getMaxColumns());
+    targetSheet.getRange(1, nextColumn).setValue(header);
+    headers.push(header);
+  });
   return targetSheet;
 }
 
