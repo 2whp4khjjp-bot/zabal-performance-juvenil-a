@@ -77,7 +77,7 @@ describe('servicio local', () => {
     const { auth: player } = await service.authenticate('1001', 'player');
     const playerMatches = await service.getMatches(player.token);
     expect(playerMatches).toHaveLength(1);
-    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', number: 1, calledUp: true, starter: true, minutes: 74, goals: 1, yellowCards: 0, redCards: 0 }]);
+    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', number: 1, calledUp: true, starter: true, minutes: 74, goals: 1, yellowCards: 0, redCards: 0, expulsionYellowCards: 0, suspensionServed: false }]);
   });
 
   it('conserva minutos y dorsal histórico al cambiar el dorsal y dar de baja a un jugador', async () => {
