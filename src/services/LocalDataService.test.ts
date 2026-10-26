@@ -77,7 +77,20 @@ describe('servicio local', () => {
     const { auth: player } = await service.authenticate('1001', 'player');
     const playerMatches = await service.getMatches(player.token);
     expect(playerMatches).toHaveLength(1);
-    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', calledUp: true, starter: true, minutes: 74, goals: 1, yellowCards: 0, redCards: 0 }]);
+    expect(playerMatches[0].minutes).toEqual([{ playerId: 'player-01', playerName: 'Adrián Vega', number: 1, calledUp: true, starter: true, minutes: 74, goals: 1, yellowCards: 0, redCards: 0 }]);
+  });
+
+  it('conserva minutos y dorsal histórico al cambiar el dorsal y dar de baja a un jugador', async () => {
+    const service = new LocalDataService();
+    const { auth: staff } = await service.authenticate('2026', 'staff');
+    const added = await service.addPlayer(staff.token, { name: 'Nuevo Jugador', number: 30 });
+    const match = await service.saveMatch(staff.token, { date: '2026-10-01', type: 'official', stage: 'league', opponent: 'Rival', durationMinutes: 90, minutes: [{ playerId: added.id, playerName: added.name, calledUp: true, starter: true, minutes: 75 }] });
+    const updated = await service.updatePlayerNumber(staff.token, added.id, 31, 30);
+    expect(updated.number).toBe(31);
+    expect((await service.getMatches(staff.token)).find((item) => item.id === match.id)?.minutes[0]).toMatchObject({ playerId: added.id, number: 30, minutes: 75 });
+    await service.removePlayer(staff.token, added.id);
+    expect((await service.getPlayers(staff.token)).some((player) => player.id === added.id)).toBe(false);
+    expect((await service.getMatches(staff.token)).find((item) => item.id === match.id)?.minutes[0].minutes).toBe(75);
   });
 
   it('no duplica reintentos y permite editar y eliminar partidos', async () => {
