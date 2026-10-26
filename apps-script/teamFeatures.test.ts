@@ -15,6 +15,17 @@ function service() {
   return { context, send, values, triggers };
 }
 describe('configuración y documentos del equipo', () => {
+  it('separa una amarilla de expulsión y una sanción cumplida al validar actas', () => {
+    const { context } = service();
+    context.rows_ = () => [{ id: 'p1', nombre: 'Cristian Blanco', dorsal: 18 }];
+    const base = { date: '2026-10-17', type: 'official', stage: 'league', opponent: 'Marbella', durationMinutes: 90 };
+    const card = { playerId: 'p1', playerName: 'Cristian Blanco', calledUp: true, starter: false, minutes: 0, goals: 0, yellowCards: 2, redCards: 1, expulsionYellowCards: 1 };
+    expect(context.validateMatchInput_({ ...base, minutes: [card] }, { role: 'staff' }).entries[0]).toMatchObject({ yellowCards: 2, redCards: 1, expulsionYellowCards: 1 });
+    expect(() => context.validateMatchInput_({ ...base, minutes: [{ ...card, redCards: 0 }] }, { role: 'staff' })).toThrow();
+    expect(() => context.validateMatchInput_({ ...base, minutes: [{ ...card, suspensionServed: true }] }, { role: 'staff' })).toThrow();
+    const served = { ...card, calledUp: false, yellowCards: 0, redCards: 0, expulsionYellowCards: 0, suspensionServed: true };
+    expect(() => context.validateMatchInput_({ ...base, minutes: [served] }, { role: 'staff' })).toThrow('convocado');
+  });
   it('conserva el dorsal antiguo hasta que se guarde uno nuevo o se quite expresamente', () => {
     const { context } = service();
     expect(context.legacyPlayerNumber_('Jairo Muñoz', '')).toBe(2);
