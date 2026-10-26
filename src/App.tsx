@@ -1,6 +1,6 @@
 import { setTeamSettings } from './utils/teamSettings';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, EmailState, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from './types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, DashboardFilter, EmailState, InjuryInput, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from './types';
 import { dataService } from './services';
 import { clearAuthSession, readAuthSession, remainingSeconds, saveAuthSession } from './utils/session';
 import { AppHeader } from './components/AppHeader';
@@ -398,6 +398,61 @@ export default function App() {
     } finally { setSaving(false); }
   };
 
+  const addPlayer = async (input: PlayerInput) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      const saved = await dataService.addPlayer(auth.token, input);
+      setPlayers((current) => {
+        const next = applyJuvenilRoster([...current, saved]);
+        if (trainingSession) saveRosterCache(auth, next, trainingSession);
+        return next;
+      });
+      setToast(`${saved.name} añadido a la plantilla`);
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo añadir el jugador.'); return false; }
+    finally { setSaving(false); }
+  };
+
+  const removePlayer = async (player: Player) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      await dataService.removePlayer(auth.token, player.id);
+      setPlayers((current) => {
+        const next = current.filter((item) => item.id !== player.id);
+        if (trainingSession) saveRosterCache(auth, next, trainingSession);
+        return next;
+      });
+      setSelectedPlayer((current) => current?.id === player.id ? null : current);
+      setToast(`${player.name} quitado de la plantilla activa`);
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo quitar el jugador.'); return false; }
+    finally { setSaving(false); }
+  };
+
+  const updatePlayerNumber = async (player: Player, number: number | undefined) => {
+    if (!auth || auth.role !== 'staff') return false;
+    setSaving(true); setError('');
+    try {
+      const saved = await dataService.updatePlayerNumber(auth.token, player.id, number, player.number);
+      setMatches((current) => {
+        const next = current.map((match) => ({ ...match, minutes: match.minutes.map((entry) => entry.playerId === player.id && entry.number === undefined ? { ...entry, number: player.number ?? null } : entry) }));
+        saveMatchesCache(auth, next);
+        return next;
+      });
+      setPlayers((current) => {
+        const next = applyJuvenilRoster(current.map((item) => item.id === saved.id ? saved : item));
+        if (trainingSession) saveRosterCache(auth, next, trainingSession);
+        return next;
+      });
+      setSelectedPlayer((current) => current?.id === saved.id ? { ...current, ...saved } : current);
+      setToast(`Dorsal de ${saved.name} actualizado`);
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cambiar el dorsal.'); return false; }
+    finally { setSaving(false); }
+  };
+
   const saveAttendance = async (input: AttendanceInput) => {
     if (!auth || auth.role !== 'staff') return false;
     setSaving(true); setError('');
@@ -460,7 +515,7 @@ export default function App() {
       {(view === 'matches' || view === 'technical') && matchesStatus !== 'ready' && <div className="global-error" role="status"><span>{matchesStatus === 'loading' ? 'Actualizando partidos con Google. Los acumulados todavía no están confirmados.' : 'No se pudieron actualizar los partidos. Los goleadores y demás acumulados pueden estar desactualizados. Se reintentará automáticamente.'}</span><button disabled={matchesStatus === 'loading'} onClick={() => setMatchesRefresh((value) => value + 1)}>Reintentar</button></div>}
       <PageNavigation onBack={goBack} onHome={() => window.location.assign(environment.homeUrl)} />
       {loading && !players.length ? <div className="loading-screen"><span className="loader" /><p>Preparando la sesión…</p></div> : null}
-      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} />}
+      {!loading && auth.role === 'staff' && view === 'players' && !selectedPlayer && <PlayerGrid players={players} measurements={measurements} selectedDate={measurementDate} onDateChange={setMeasurementDate} onSelect={setSelectedPlayer} filter={filter} onFilterChange={setFilter} query={query} onQueryChange={setQuery} saving={saving} onAddPlayer={addPlayer} onRemovePlayer={removePlayer} onUpdatePlayerNumber={updatePlayerNumber} />}
       {!loading && view === 'players' && selectedPlayer && trainingSession && <PlayerForm player={selectedPlayer} measurements={measurements} matches={matches} session={trainingSession} saving={saving} onSave={saveMeasurement} onInjuryChange={setPlayerInjury} onBack={() => setSelectedPlayer(null)} role={auth.role} selectedDate={measurementDate} onDateChange={setMeasurementDate} />}
       <Suspense fallback={<div className="loading-screen"><span className="loader" /><p>Cargando módulo…</p></div>}>
         {!loading && auth.role === 'staff' && view === 'matches' && <MatchesPanel players={players} matches={matches} saving={saving} onSave={saveMatch} onUpdate={updateMatch} onDelete={deleteMatch} />}
