@@ -9,8 +9,8 @@ export const generateMinutesPdf = async (players: Player[], matches: MatchRecord
     player, callUps: 0, starts: 0, appearances: 0, minutes: 0,
   }]));
   matches.forEach((match) => match.minutes.forEach((entry) => {
-    const total = totals.get(entry.playerId);
-    if (!total) return;
+    if (!totals.has(entry.playerId)) totals.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, number: entry.number ?? undefined, active: false, order: 999, joinedAt: match.date }, callUps: 0, starts: 0, appearances: 0, minutes: 0 });
+    const total = totals.get(entry.playerId)!;
     if (entry.calledUp) total.callUps += 1;
     if (entry.starter) total.starts += 1;
     if (entry.minutes > 0) total.appearances += 1;
