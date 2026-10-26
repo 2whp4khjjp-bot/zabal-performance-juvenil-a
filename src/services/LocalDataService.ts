@@ -287,11 +287,15 @@ export class LocalDataService implements DataService {
       const goals = entry.goals ?? 0;
       const yellowCards = entry.yellowCards ?? 0;
       const redCards = entry.redCards ?? 0;
+      const expulsionYellowCards = entry.expulsionYellowCards ?? 0;
+      const suspensionServed = Boolean(entry.suspensionServed);
       if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Revisa los goles de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
+      if (!Number.isInteger(expulsionYellowCards) || expulsionYellowCards < 0 || expulsionYellowCards > yellowCards || expulsionYellowCards > redCards) throw new DataServiceError(`Revisa las amarillas vinculadas a la expulsión de ${entry.playerName}.`, 'VALIDATION');
+      if (suspensionServed && (calledUp || starter || entry.minutes || goals || yellowCards || redCards)) throw new DataServiceError(`${entry.playerName} no puede cumplir sanción y participar en el mismo partido.`, 'VALIDATION');
       if (!calledUp && (starter || entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
-      return { playerId: player.id, playerName: player.name, number: entry.number === undefined ? player.number ?? null : entry.number, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards };
+      return { playerId: player.id, playerName: player.name, number: entry.number === undefined ? player.number ?? null : entry.number, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards, expulsionYellowCards, suspensionServed };
     });
     if (!minutes.some((entry) => entry.calledUp)) throw new DataServiceError('Marca como convocado al menos a un jugador.', 'VALIDATION');
     if (minutes.filter((entry) => entry.starter).length > ((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)) throw new DataServiceError(`No puedes marcar más de ${((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)} titulares.`, 'VALIDATION');
