@@ -22,7 +22,7 @@ const HEADERS = {
   Configuración: ['clave', 'valor'],
   'Códigos jugadores': ['jugador_id', 'jugador_nombre', 'pin'],
   Partidos: ['id', 'fecha', 'tipo', 'rival', 'duracion_minutos', 'creado_en', 'actualizado_en', 'creado_por', 'fase'],
-  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular'],
+  'Minutos partidos': ['partido_id', 'jugador_id', 'jugador_nombre', 'minutos', 'amarillas', 'rojas', 'convocado', 'goles', 'titular', 'dorsal'],
   Bajas: ['id', 'jugador_id', 'jugador_nombre', 'fecha_inicio', 'fecha_fin', 'motivo', 'creado_en', 'actualizado_en'],
   Asistencia: ['id', 'fecha', 'jugador_id', 'jugador_nombre', 'estado', 'minutos_retraso', 'comentarios', 'creado_en', 'actualizado_en', 'creado_por'],
 };
@@ -94,6 +94,9 @@ function doPost(event) {
     if (action === 'saveReportSchedule') return json_({ ok: true, data: saveReportSchedule_(input.schedule, session) });
     if (action === 'getBootstrap') return json_({ ok: true, data: getBootstrap_(session) });
     if (action === 'getPlayers') return json_({ ok: true, data: getPlayers_(session) });
+    if (action === 'addPlayer') return json_({ ok: true, data: addPlayer_(input.player, session) });
+    if (action === 'removePlayer') return json_({ ok: true, data: removePlayer_(input.playerId, session) });
+    if (action === 'updatePlayerNumber') return json_({ ok: true, data: updatePlayerNumber_(input.playerId, input.number, input.expectedNumber, session) });
     if (action === 'getMeasurements') return json_({ ok: true, data: getMeasurements_(session) });
     if (action === 'getCurrentSession') return json_({ ok: true, data: getCurrentSession_() });
     if (action === 'saveMeasurement') return json_({ ok: true, data: saveMeasurement_(input.measurement, session) });
@@ -228,8 +231,119 @@ function getPlayers_(session) {
     const injured = Object.prototype.hasOwnProperty.call(row, 'baja_lesion')
       ? boolean_(row.baja_lesion)
       : injuries.some(function(period) { return period.startDate <= today && (!period.endDate || period.endDate >= today); });
-    return { id: String(row.id), name: name, number: staffMember ? undefined : numberOrNull_(row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: injured, injuries: injuries, staffMember: staffMember };
+    return { id: String(row.id), name: name, number: staffMember ? undefined : legacyPlayerNumber_(name, row.dorsal), active: true, order: Number(row.orden || 0), joinedAt: dateKey_(row.fecha_alta), injured: injured, injuries: injuries, staffMember: staffMember };
   }).sort(function(a, b) { return Number(Boolean(a.staffMember)) - Number(Boolean(b.staffMember)) || (a.number || 999) - (b.number || 999) || a.order - b.order; });
+}
+
+function addPlayer_(input, session) {
+  requireStaff_(session);
+  if (!input) throw apiError_('Faltan los datos del jugador.', 'VALIDATION');
+  const name = String(input.name || '').replace(/[<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  const hasNumber = input.number !== undefined && input.number !== null && String(input.number) !== '';
+  const number = hasNumber ? Number(input.number) : null;
+  if (name.length < 2) throw apiError_('Introduce el nombre del jugador.', 'VALIDATION');
+  if (hasNumber && (!Number.isInteger(number) || number < 1 || number > 99)) throw apiError_('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const target = sheet_(SHEETS.PLAYERS);
+    const values = target.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const index = {};
+    headers.forEach(function(header, column) { index[header] = column; });
+    let maxOrder = 0;
+    values.slice(1).forEach(function(row) {
+      maxOrder = Math.max(maxOrder, Number(row[index.orden] || 0));
+      if (!boolean_(row[index.activo])) return;
+      if (String(row[index.nombre] || '').trim().toLocaleLowerCase() === name.toLocaleLowerCase()) throw apiError_('Ya hay un jugador activo con ese nombre.', 'DUPLICATE_PLAYER');
+      if (hasNumber && legacyPlayerNumber_(String(row[index.nombre]), row[index.dorsal]) === number) throw apiError_('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    });
+    const player = { id: 'player-' + Utilities.getUuid(), name: name, number: number, active: true, order: maxOrder + 1, joinedAt: dateKey_(new Date()), injured: false, injuries: [], staffMember: false };
+    target.appendRow(headers.map(function(header) {
+      if (header === 'id') return player.id;
+      if (header === 'nombre') return player.name;
+      if (header === 'dorsal') return number === null ? '' : number;
+      if (header === 'activo') return true;
+      if (header === 'orden') return player.order;
+      if (header === 'fecha_alta') return player.joinedAt;
+      return '';
+    }));
+    return player;
+  } finally { lock.releaseLock(); }
+}
+
+function removePlayer_(playerId, session) {
+  requireStaff_(session);
+  const id = String(playerId || '').trim();
+  if (!id) throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const target = sheet_(SHEETS.PLAYERS);
+    const values = target.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const idColumn = headers.indexOf('id');
+    const activeColumn = headers.indexOf('activo');
+    const index = values.slice(1).findIndex(function(row) { return String(row[idColumn]) === id && boolean_(row[activeColumn]); });
+    if (index < 0) throw apiError_('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    target.getRange(index + 2, activeColumn + 1).setValue(false);
+    return true;
+  } finally { lock.releaseLock(); }
+}
+
+function updatePlayerNumber_(playerId, requestedNumber, expectedNumber, session) {
+  requireStaff_(session);
+  const id = String(playerId || '').trim();
+  const hasNumber = requestedNumber !== undefined && requestedNumber !== null && String(requestedNumber) !== '';
+  const number = hasNumber ? Number(requestedNumber) : null;
+  if (!id) throw apiError_('Jugador no válido.', 'INVALID_PLAYER');
+  if (hasNumber && (!Number.isInteger(number) || number < 1 || number > 99)) throw apiError_('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw apiError_('Hay muchos guardados a la vez. Inténtalo de nuevo.', 'BUSY');
+  try {
+    const target = sheet_(SHEETS.PLAYERS);
+    const values = target.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const idColumn = headers.indexOf('id');
+    const numberColumn = headers.indexOf('dorsal');
+    const activeColumn = headers.indexOf('activo');
+    const index = values.slice(1).findIndex(function(row) { return String(row[idColumn]) === id && boolean_(row[activeColumn]); });
+    if (index < 0) throw apiError_('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    const row = values[index + 1];
+    const oldNumber = legacyPlayerNumber_(String(row[headers.indexOf('nombre')]), row[numberColumn]) || null;
+    if (oldNumber !== (expectedNumber === null || expectedNumber === undefined ? null : Number(expectedNumber))) throw apiError_('El dorsal ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    if (number !== null && values.some(function(other, otherIndex) { return otherIndex > 0 && otherIndex !== index + 1 && boolean_(other[activeColumn]) && legacyPlayerNumber_(String(other[headers.indexOf('nombre')]), other[numberColumn]) === number; })) throw apiError_('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    const minutesSheet = ensureMatchMinutesSchema_();
+    const minuteValues = minutesSheet.getDataRange().getValues();
+    const minuteHeaders = minuteValues[0].map(String);
+    const playerColumn = minuteHeaders.indexOf('jugador_id');
+    const snapshotColumn = minuteHeaders.indexOf('dorsal');
+    minuteValues.forEach(function(entry, rowIndex) {
+      if (rowIndex > 0 && String(entry[playerColumn]) === id && !hasValue_(entry[snapshotColumn])) minutesSheet.getRange(rowIndex + 1, snapshotColumn + 1).setValue(oldNumber === null ? 0 : oldNumber);
+    });
+    target.getRange(index + 2, numberColumn + 1).setValue(number === null ? 0 : number);
+    invalidateMatchesApiCache_();
+    return getPlayers_({ role: 'staff' }).find(function(player) { return player.id === id; });
+  } finally { lock.releaseLock(); }
+}
+
+// Compatibilidad con la numeración que se mostraba antes de editar la hoja.
+// Un 0 guardado significa "sin dorsal" de forma explícita.
+function legacyPlayerNumber_(name, stored) {
+  if (hasValue_(stored)) {
+    const value = Number(stored);
+    return Number.isInteger(value) && value >= 1 && value <= 99 ? value : undefined;
+  }
+  const patterns = [
+    [1, /^álvaro torres$/i], [2, /^jairo muñoz$/i], [3, /^antonio torres$/i], [4, /^daren castro$/i],
+    [5, /^jorge vera$/i], [6, /^raúl andrades$/i], [7, /^connor(?:\s|$)/i], [8, /^samuel lozano$/i],
+    [9, /cañestro/i], [10, /^ángel omaña$/i], [11, /^sam( russell)?$/i], [13, /^dani/i],
+    [14, /^manuel arroyo$/i], [16, /^samuel (espinosa|m)/i], [17, /piñer/i], [18, /^(cristian|kristian) blanco$/i],
+    [19, /parra/i], [20, /(álex|alex).*herrera|a\. herrera/i], [21, /oncala/i], [22, /^nico/i],
+    [23, /^pepe ruiz$/i], [24, /^francis pecino$/i], [25, /^álvaro cervera$/i], [26, /^lázaro gómez$/i],
+  ];
+  const found = patterns.find(function(item) { return item[1].test(String(name || '').trim()); });
+  return found ? found[0] : undefined;
 }
 
 function getInjuryPeriods_() {
@@ -1153,6 +1267,7 @@ function getMatches_(session) {
     minutesByMatch[matchId].push({
       playerId: String(row.jugador_id),
       playerName: String(row.jugador_nombre),
+      number: hasValue_(row.dorsal) ? (Number(row.dorsal) || null) : (legacyPlayerNumber_(String(row.jugador_nombre), '') || null),
       calledUp: hasValue_(row.convocado) ? boolean_(row.convocado) : Number(row.minutos || 0) > 0 || Number(row.amarillas || 0) > 0 || Number(row.rojas || 0) > 0,
       starter: boolean_(row.titular),
       minutes: Number(row.minutos || 0),
@@ -1224,7 +1339,9 @@ function validateMatchInput_(input, session) {
   if (!Number.isInteger(duration) || duration < 1 || duration > 180) throw apiError_('La duración del partido no es válida.', 'VALIDATION');
   if (!entries.length) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
 
-  const players = getPlayers_({ role: 'staff' });
+  const players = rows_(SHEETS.PLAYERS).filter(function(row) { return !isStaffName_(String(row.nombre || '')); }).map(function(row) {
+    return { id: String(row.id), name: String(row.nombre), number: legacyPlayerNumber_(String(row.nombre), row.dorsal) || null };
+  });
   const playersById = {};
   players.forEach(function(player) { playersById[player.id] = player; });
   const seen = {};
@@ -1244,7 +1361,8 @@ function validateMatchInput_(input, session) {
     if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw apiError_('Las rojas de ' + player.name + ' no son válidas.', 'VALIDATION');
     if (!calledUp && (starter || minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
     seen[playerId] = true;
-    return { playerId: player.id, playerName: player.name, calledUp: calledUp, starter: starter, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
+    const number = entry.number === null || entry.number === 0 ? null : Number.isInteger(Number(entry.number)) && Number(entry.number) >= 1 && Number(entry.number) <= 99 ? Number(entry.number) : player.number;
+    return { playerId: player.id, playerName: player.name, number: number, calledUp: calledUp, starter: starter, minutes: minutes, goals: goals, yellowCards: yellowCards, redCards: redCards };
   });
   if (!cleanEntries.some(function(entry) { return entry.calledUp; })) throw apiError_('Marca como convocado al menos a un jugador.', 'VALIDATION');
   if (cleanEntries.filter(function(entry) { return entry.starter; }).length > (getTeamSettings_().profile === 'football7' ? 7 : 11)) throw apiError_('No puedes marcar más de ' + (getTeamSettings_().profile === 'football7' ? 7 : 11) + ' titulares.', 'VALIDATION');
@@ -1265,7 +1383,7 @@ function saveMatch_(input, session) {
     const id = requestedId || Utilities.getUuid();
     const now = new Date();
     ensureMatchSchema_().appendRow([id, clean.date, clean.type, clean.opponent, clean.duration, now, now, 'cuerpo-tecnico', clean.stage]);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     invalidateMatchesApiCache_();
@@ -1305,7 +1423,7 @@ function updateMatch_(matchId, input, session) {
       return '';
     })]);
     deleteRowsByMatchId_(sheet_(SHEETS.MATCH_MINUTES), id);
-    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter]; });
+    const minuteRows = clean.entries.map(function(entry) { return [id, entry.playerId, entry.playerName, entry.minutes, entry.yellowCards, entry.redCards, entry.calledUp, entry.goals, entry.starter, entry.number === null ? 0 : entry.number]; });
     const minutesSheet = ensureMatchMinutesSchema_();
     minutesSheet.getRange(minutesSheet.getLastRow() + 1, 1, minuteRows.length, minuteRows[0].length).setValues(minuteRows);
     invalidateMatchesApiCache_();
@@ -1337,6 +1455,7 @@ function ensureMatchMinutesSchema_() {
   const targetSheet = sheet_(SHEETS.MATCH_MINUTES);
   const headers = targetSheet.getRange(1, 1, 1, Math.max(1, targetSheet.getLastColumn())).getValues()[0].map(String);
   if (headers.indexOf('titular') < 0) targetSheet.getRange(1, headers.length + 1).setValue('titular');
+  if (headers.indexOf('dorsal') < 0) targetSheet.getRange(1, targetSheet.getLastColumn() + 1).setValue('dorsal');
   return targetSheet;
 }
 
