@@ -43,9 +43,9 @@ export async function createMatchDocument(match: MatchRecord, players: Player[])
   const captain = players.find((player) => player.id === match.captainId)?.name || match.minutes.find((entry) => entry.playerId === match.captainId)?.playerName || 'Sin registrar';
   autoTable(doc, { startY: 57, theme: 'plain', body: [['Resultado (Zabal - rival)', result], ['Árbitro', match.referee || 'Sin registrar'], ['Capitán', captain], ['Tipo / duración', (match.type === 'official' ? 'Oficial' : 'Amistoso') + ' · ' + match.durationMinutes + ' minutos']], styles: { fontSize: 10, cellPadding: 3 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 65 } } });
   const tableEnd = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  autoTable(doc, { startY: tableEnd + 7, head: [['Jugador', 'Conv.', 'Tit.', 'Min.', 'Goles', 'TA', 'TR']], body: match.minutes.map((entry) => {
+  autoTable(doc, { startY: tableEnd + 7, head: [['Jugador', 'Conv.', 'Tit.', 'Min.', 'Goles', 'TA', 'TR', 'TA exp.', 'Sanc.']], body: match.minutes.map((entry) => {
     const detail = entry as typeof entry & { calledUp?: boolean; starter?: boolean; goals?: number; yellowCards?: number; redCards?: number };
-    return [entry.playerName, detail.calledUp === false ? 'No' : 'Sí', detail.starter ? 'Sí' : '-', entry.minutes, detail.goals ?? 0, detail.yellowCards ?? 0, detail.redCards ?? 0];
+    return [entry.playerName, detail.calledUp === false ? 'No' : 'Sí', detail.starter ? 'Sí' : '-', entry.minutes, detail.goals ?? 0, detail.yellowCards ?? 0, detail.redCards ?? 0, entry.expulsionYellowCards ?? 0, entry.suspensionServed ? 'Cumplida' : '-'];
   }), margin: { top: 18, bottom: 22 }, styles: { fontSize: 8.5, cellPadding: 2.4 }, headStyles: { fillColor: [22,54,95] }, alternateRowStyles: { fillColor: [244,247,250] } });
   const finalY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
   autoTable(doc, { startY: finalY + 7, head: [['Incidencias']], body: [[match.incidents || 'Sin incidencias registradas.']], margin: { top: 18, bottom: 22 }, styles: { fontSize: 9, cellPadding: 3 }, headStyles: { fillColor: [22,54,95] } });
