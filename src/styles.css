@@ -783,3 +783,23 @@ html[data-team-features]:not([data-team-features~="fatigue"]):not([data-team-fea
 .report-email-panel__schedule-fields select { padding: 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--navy); background: #fff; }
 
 .report-email-open { margin: 0 22px 16px; }
+.roster-manage-button { align-self: center; white-space: nowrap; }
+.roster-manager { margin-bottom: 20px; }
+.roster-manager .panel-card__heading p:last-child { margin: 5px 0 0; color: var(--muted); font-size: .8rem; }
+.roster-add-form { margin-bottom: 18px; display: grid; grid-template-columns: minmax(220px, 1fr) 120px auto; align-items: end; gap: 12px; }
+.roster-add-form label { display: flex; flex-direction: column; gap: 6px; color: #526174; font-size: .78rem; font-weight: 800; }
+.roster-add-form input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #cbd6e1; border-radius: 9px; color: var(--navy); background: #fff; }
+.roster-add-form .button { min-height: 44px; }
+.roster-manager-list { border-top: 1px solid var(--border); }
+.roster-manager-list > div { min-height: 58px; padding: 8px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.roster-manager-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--navy); white-space: nowrap; }
+.roster-player-actions { display: flex; gap: 8px; align-items: center; }
+.roster-edit-button { min-height: 36px; padding: 0 10px; display: inline-flex; gap: 6px; align-items: center; }
+.roster-number-form { grid-column: 2 / -1; padding: 6px 0 10px; display: flex; flex-wrap: wrap; align-items: end; gap: 9px; }
+.roster-number-form label { min-width: 180px; display: flex; flex-direction: column; gap: 5px; color: #526174; font-size: .78rem; font-weight: 800; }
+.roster-number-form input { height: 40px; padding: 0 10px; border: 1px solid #cbd6e1; border-radius: 8px; color: var(--navy); }
+.roster-number-form .button { min-height: 40px; }
+.roster-remove-button { min-height: 36px; padding: 0 10px; border: 1px solid #efc7cc; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; color: #a22f3c; background: #fff7f8; font-weight: 800; }
+.roster-remove-button:disabled { opacity: .55; }
+@media (max-width: 760px) { .roster-manage-button { align-self: flex-start; } .roster-add-form { grid-template-columns: minmax(0, 1fr) 105px; } .roster-add-form .button { grid-column: 1 / -1; } }
+@media (max-width: 520px) { .roster-add-form { grid-template-columns: 1fr; } .roster-add-form .button { grid-column: auto; } .roster-manager-list > div { grid-template-columns: 36px minmax(0, 1fr); } .roster-player-actions { grid-column: 2; flex-wrap: wrap; } .roster-number-form { grid-column: 1 / -1; } }
