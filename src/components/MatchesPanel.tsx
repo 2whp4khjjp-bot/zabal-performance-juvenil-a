@@ -49,7 +49,9 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [redByPlayer, setRedByPlayer] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [generatingMinutesPdf, setGeneratingMinutesPdf] = useState(false);
-  const formPlayers = editingId ? allPlayers : eligiblePlayers;
+  const editingMatch = editingId ? matches.find((match) => match.id === editingId) : undefined;
+  const historicPlayers = editingMatch?.minutes.filter((entry) => !allPlayers.some((player) => player.id === entry.playerId)).map((entry, index): Player => ({ id: entry.playerId, name: entry.playerName, number: entry.number ?? undefined, active: false, order: allPlayers.length + index, joinedAt: editingMatch.date })) ?? [];
+  const formPlayers = editingId ? [...allPlayers, ...historicPlayers] : eligiblePlayers;
 
   useEffect(() => {
     if (editingId) return;
@@ -67,8 +69,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     const byPlayer = new Map<string, { player: Player; callUps: number; starts: number; appearances: number; minutes: number; goals: number; yellowCards: number; redCards: number }>();
     players.filter((player) => !player.staffMember).forEach((player) => byPlayer.set(player.id, { player, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 }));
     scopedMatches.forEach((match) => match.minutes.forEach((entry) => {
-      const total = byPlayer.get(entry.playerId);
-      if (!total) return;
+      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, number: entry.number ?? undefined, active: false, order: 999, joinedAt: match.date }, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0 });
+      const total = byPlayer.get(entry.playerId)!;
       total.minutes += entry.minutes;
       total.goals += entry.goals ?? 0;
       if (entry.calledUp) total.callUps += 1;
@@ -140,7 +142,8 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         const goals = Number(goalsByPlayer[player.id] || 0);
         const yellowCards = Number(yellowByPlayer[player.id] || 0);
         const redCards = Number(redByPlayer[player.id] || 0);
-        return { playerId: player.id, playerName: player.name, calledUp: Boolean(calledUpByPlayer[player.id]), starter: Boolean(starterByPlayer[player.id]), minutes: Number(raw || 0), goals, yellowCards, redCards };
+        const previousNumber = editingMatch?.minutes.find((entry) => entry.playerId === player.id)?.number;
+        return { playerId: player.id, playerName: player.name, number: previousNumber === undefined ? player.number ?? null : previousNumber, calledUp: Boolean(calledUpByPlayer[player.id]), starter: Boolean(starterByPlayer[player.id]), minutes: Number(raw || 0), goals, yellowCards, redCards };
       }),
     };
     const saved = editingId ? await onUpdate(editingId, input) : await onSave({ ...input, requestId: saveRequestId });
@@ -162,7 +165,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     setEditingId(match.id); setDate(match.date); setType(match.type); setStage(getMatchStage(match)); setOpponent(match.opponent); setDetails(detailsFromMatch(match));
     const option = durationOptions.includes(match.durationMinutes as typeof durationOptions[number]) ? String(match.durationMinutes) : 'custom';
     setDurationOption(option); setCustomDuration(String(match.durationMinutes));
-    setCalledUpByPlayer(Object.fromEntries(allPlayers.map((player) => [player.id, Boolean(match.minutes.find((entry) => entry.playerId === player.id)?.calledUp)])));
+    setCalledUpByPlayer(Object.fromEntries(match.minutes.map((entry) => [entry.playerId, Boolean(entry.calledUp)])));
     setStarterByPlayer(Object.fromEntries(match.minutes.filter((entry) => entry.starter).map((entry) => [entry.playerId, true])));
     setMinutesByPlayer(Object.fromEntries(match.minutes.filter((entry) => entry.minutes > 0).map((entry) => [entry.playerId, String(entry.minutes)])));
     setGoalsByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.goals ?? 0) > 0).map((entry) => [entry.playerId, String(entry.goals)])));
@@ -208,7 +211,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
           </div>
           <div className="match-player-list">
             {formPlayers.map((player) => <label className="match-player-row" key={player.id}>
-              <span className="match-player-number">{player.number ?? player.order}</span>
+              <span className="match-player-number">{editingMatch?.minutes.find((entry) => entry.playerId === player.id)?.number ?? player.number ?? '—'}</span>
               <span className="match-player-name">{player.name}</span>
               <span className={`match-called-up ${calledUpByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(calledUpByPlayer[player.id])} onChange={(event) => { const checked = event.target.checked; setCalledUpByPlayer((current) => ({ ...current, [player.id]: checked })); if (!checked) setStarterByPlayer((current) => ({ ...current, [player.id]: false })); setErrors([]); }} aria-label={`Convocado: ${player.name}`} /><Check size={16} /><small>Conv.</small></span>
               <span className={`match-starter ${starterByPlayer[player.id] ? 'active' : ''}`}><input type="checkbox" checked={Boolean(starterByPlayer[player.id])} disabled={!starterByPlayer[player.id] && starterCount >= maxStarters} onChange={(event) => { const checked = event.target.checked; setStarterByPlayer((current) => ({ ...current, [player.id]: checked })); if (checked) setCalledUpByPlayer((current) => ({ ...current, [player.id]: true })); setErrors([]); }} aria-label={`Titular: ${player.name}`} /><Star size={16} /><small>Tit.</small></span>
