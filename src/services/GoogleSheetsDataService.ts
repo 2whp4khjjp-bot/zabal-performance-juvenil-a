@@ -1,5 +1,5 @@
 import type { TeamSettings } from '../utils/teamSettings';
-import type { AttendanceInput, AttendanceRecord, AuthRole, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 import type { DataService } from './DataService';
 import { DataServiceError } from './DataService';
 
@@ -8,6 +8,9 @@ type ApiResponse<T> = { ok: boolean; data?: T; error?: string; code?: string };
 export class GoogleSheetsDataService implements DataService {
   constructor(private readonly endpoint: string) {}
   getTeamSettings(token: string) { return this.request<TeamSettings>('getTeamSettings', { token }); }
+  addPlayer(token: string, player: PlayerInput) { return this.request<Player>('addPlayer', { token, player }); }
+  removePlayer(token: string, playerId: string) { return this.request<boolean>('removePlayer', { token, playerId }); }
+  updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined) { return this.request<Player>('updatePlayerNumber', { token, playerId, number: number ?? null, expectedNumber: expectedNumber ?? null }); }
   saveTeamSettings(token: string, settings: TeamSettings) { return this.request<TeamSettings>('saveTeamSettings', { token, settings }); }
   emailAttendance(token: string, email: string, pdfBase64: string, periodLabel: string, requestId: string) { return this.request<boolean>('emailAttendance', { token, email, pdfBase64, periodLabel, requestId }); }
   getReportRecipients(token: string) { return this.request<string[]>('getReportRecipients', { token }); }
