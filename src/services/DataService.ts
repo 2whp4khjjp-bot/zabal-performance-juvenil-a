@@ -1,5 +1,5 @@
 import type { TeamSettings } from '../utils/teamSettings';
-import type { AttendanceInput, AttendanceRecord, AuthRole, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 
 export type ReportSchedule = { enabled: boolean; weekday: number; hour: number; emails: string[] };
 
@@ -16,6 +16,9 @@ export interface DataService {
   logout(token: string): Promise<void>;
   getBootstrap(token: string): Promise<BootstrapData>;
   getPlayers(token: string): Promise<Player[]>;
+  addPlayer(token: string, input: PlayerInput): Promise<Player>;
+  removePlayer(token: string, playerId: string): Promise<boolean>;
+  updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined): Promise<Player>;
   getMeasurements(token: string): Promise<Measurement[]>;
   getCurrentSession(token: string): Promise<TrainingSession>;
   saveMeasurement(token: string, input: MeasurementInput): Promise<Measurement>;
