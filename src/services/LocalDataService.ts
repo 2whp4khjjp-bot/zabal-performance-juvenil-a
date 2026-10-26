@@ -1,7 +1,7 @@
 import type { TeamSettings } from '../utils/teamSettings';
 import { appConfig, environment } from '../config';
 import { createDemoMeasurements, createTodaySession, demoPlayers } from '../data/demo';
-import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, TrainingSession } from '../types';
+import type { AttendanceInput, AttendanceRecord, AuthRole, AuthSession, BirthdayState, BootstrapData, EmailState, InjuryInput, LoginResult, MatchInput, MatchRecord, Measurement, MeasurementInput, Player, PlayerInput, TrainingSession } from '../types';
 import { todayKey } from '../utils/date';
 import { playerIsInjuredOn } from '../utils/injuries';
 import { sanitizeComment } from '../utils/measurements';
@@ -136,6 +136,47 @@ export class LocalDataService implements DataService {
     return session.role === 'player' ? players.filter((player) => player.id === session.playerId) : players;
   }
 
+  async addPlayer(token: string, input: PlayerInput): Promise<Player> {
+    const session = this.requireSession(token);
+    if (session.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede gestionar la plantilla.', 'FORBIDDEN');
+    const name = input.name.replace(/[<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    const number = input.number ?? null;
+    if (name.length < 2) throw new DataServiceError('Introduce el nombre del jugador.', 'VALIDATION');
+    if (number !== null && (!Number.isInteger(number) || number < 1 || number > 99)) throw new DataServiceError('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    if (players.some((player) => player.active && player.name.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) throw new DataServiceError('Ya hay un jugador activo con ese nombre.', 'DUPLICATE_PLAYER');
+    if (number !== null && players.some((player) => player.active && player.number === number)) throw new DataServiceError('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    const saved: Player = { id: `player-${crypto.randomUUID()}`, name, number: number ?? undefined, active: true, order: Math.max(0, ...players.map((player) => player.order)) + 1, joinedAt: todayKey() };
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify([...players, saved]));
+    return saved;
+  }
+
+  async removePlayer(token: string, playerId: string): Promise<boolean> {
+    const session = this.requireSession(token);
+    if (session.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede gestionar la plantilla.', 'FORBIDDEN');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const player = players.find((item) => item.id === playerId && item.active);
+    if (!player) throw new DataServiceError('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players.map((item) => item.id === playerId ? { ...item, active: false } : item)));
+    return true;
+  }
+
+  async updatePlayerNumber(token: string, playerId: string, number: number | undefined, expectedNumber: number | null | undefined): Promise<Player> {
+    const session = this.requireSession(token);
+    if (session.role !== 'staff') throw new DataServiceError('Solo el cuerpo técnico puede gestionar la plantilla.', 'FORBIDDEN');
+    if (number !== undefined && (!Number.isInteger(number) || number < 1 || number > 99)) throw new DataServiceError('El dorsal debe estar entre 1 y 99.', 'VALIDATION');
+    const players = readJson(PLAYERS_KEY, demoPlayers);
+    const player = players.find((item) => item.id === playerId && item.active);
+    if (!player) throw new DataServiceError('El jugador ya no pertenece a la plantilla activa.', 'INVALID_PLAYER');
+    if ((player.number ?? null) !== (expectedNumber ?? null)) throw new DataServiceError('El dorsal ha cambiado. Recarga la página antes de editarlo.', 'CONFLICT');
+    if (number !== undefined && players.some((item) => item.id !== playerId && item.active && item.number === number)) throw new DataServiceError('Ese dorsal ya está asignado.', 'DUPLICATE_NUMBER');
+    const saved = { ...player, number };
+    const matches = readJson<MatchRecord[]>(MATCHES_KEY, []);
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(matches.map((match) => ({ ...match, minutes: match.minutes.map((entry) => entry.playerId === playerId && entry.number === undefined ? { ...entry, number: player.number ?? null } : entry) }))));
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players.map((item) => item.id === playerId ? saved : item)));
+    return saved;
+  }
+
   async getMeasurements(token: string): Promise<Measurement[]> {
     const session = this.requireSession(token);
     const measurements = readJson(MEASUREMENTS_KEY, createDemoMeasurements());
@@ -235,7 +276,7 @@ export class LocalDataService implements DataService {
     const players = readJson(PLAYERS_KEY, demoPlayers);
     const seen = new Set<string>();
     const minutes = input.minutes.map((entry) => {
-      const player = players.find((item) => item.id === entry.playerId && item.active);
+      const player = players.find((item) => item.id === entry.playerId);
       if (!player || player.name !== entry.playerName || seen.has(entry.playerId)) throw new DataServiceError('Hay un jugador no válido o repetido.', 'INVALID_PLAYER');
       if (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > input.durationMinutes) {
         throw new DataServiceError(`Los minutos de ${entry.playerName} no son válidos.`, 'VALIDATION');
@@ -250,7 +291,7 @@ export class LocalDataService implements DataService {
       if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
       if (!calledUp && (starter || entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
-      return { playerId: player.id, playerName: player.name, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards };
+      return { playerId: player.id, playerName: player.name, number: entry.number === undefined ? player.number ?? null : entry.number, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards };
     });
     if (!minutes.some((entry) => entry.calledUp)) throw new DataServiceError('Marca como convocado al menos a un jugador.', 'VALIDATION');
     if (minutes.filter((entry) => entry.starter).length > ((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)) throw new DataServiceError(`No puedes marcar más de ${((await this.getTeamSettings(token)).profile === 'football7' ? 7 : 11)} titulares.`, 'VALIDATION');
