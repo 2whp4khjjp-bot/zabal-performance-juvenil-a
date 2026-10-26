@@ -152,6 +152,10 @@ export type MatchMinutes = {
   goals?: number;
   yellowCards?: number;
   redCards?: number;
+  /** Amarillas registradas que el cuerpo técnico vincula a una expulsión. */
+  expulsionYellowCards?: number;
+  /** Confirmación manual de que cumplió sanción en este partido. */
+  suspensionServed?: boolean;
 };
 
 export type PlayerDiscipline = {
