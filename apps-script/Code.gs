@@ -1366,7 +1366,7 @@ function validateMatchInput_(input, session) {
     if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw apiError_('Los goles de ' + player.name + ' no son válidos.', 'VALIDATION');
     if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw apiError_('Las amarillas de ' + player.name + ' no son válidas.', 'VALIDATION');
     if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw apiError_('Las rojas de ' + player.name + ' no son válidas.', 'VALIDATION');
-    if (!Number.isInteger(expulsionYellowCards) || expulsionYellowCards < 0 || expulsionYellowCards > yellowCards || expulsionYellowCards > redCards) throw apiError_('Revisa las amarillas vinculadas a la expulsión de ' + player.name + '.', 'VALIDATION');
+    if ([0, 2].indexOf(expulsionYellowCards) < 0 || (expulsionYellowCards === 2 && (yellowCards !== 2 || redCards !== 1))) throw apiError_('Revisa el tipo de expulsión de ' + player.name + '; una doble amarilla excluye las dos amarillas del acumulado.', 'VALIDATION');
     if (suspensionServed && (calledUp || starter || minutes || goals || yellowCards || redCards)) throw apiError_(player.name + ' no puede cumplir sanción y participar en el mismo partido.', 'VALIDATION');
     if (!calledUp && (starter || minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw apiError_(player.name + ' debe figurar como convocado.', 'VALIDATION');
     seen[playerId] = true;
