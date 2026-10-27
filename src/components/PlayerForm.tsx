@@ -123,7 +123,7 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
 
   const change = weightChange(history);
   const discipline = disciplineForPlayer(matchesInScope(matches, 'league'), player.id);
-  const sanctionWarning = discipline.accumulationYellowCards > 0 && discipline.accumulationYellowCards % 5 === 4;
+  const sanctionWarning = !discipline.needsReview && discipline.accumulationYellowCards > 0 && discipline.accumulationYellowCards % 5 === 4;
 
   return (
     <main className="page-shell form-page">
@@ -133,9 +133,10 @@ export function PlayerForm({ player, measurements, matches, session, saving, onS
         <div><p className="eyebrow eyebrow--dark">Control preentrenamiento · {formatDate(measurementDate)}</p><h1>{player.name}</h1>{existing && <span className="edit-badge"><History size={14} /> Editando una medición existente</span>}</div>
       </div>
       {(discipline.yellowCards > 0 || discipline.redCards > 0 || discipline.suspensionMatches.length > 0) && <section data-feature="cards" className={`discipline-profile-alert ${sanctionWarning ? 'discipline-profile-alert--danger' : ''}`}>
-        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellowCards} amarillas registradas · {discipline.accumulationYellowCards} para acumulación</strong>
+        <span className="card-mark card-mark--yellow" /> <strong>{discipline.yellowCards} amarillas registradas · {discipline.needsReview ? 'acumulado pendiente de revisar' : `${discipline.accumulationYellowCards} para acumulación`}</strong>
         <span className="card-mark card-mark--red" /> <strong>{discipline.redCards} rojas de liga</strong>
         {discipline.suspensionMatches.length > 0 && <em>Sanción cumplida (registro manual): {discipline.suspensionMatches.map((item) => `${item.date} · ${item.opponent}`).join(', ')}</em>}
+        {discipline.needsReview && <em>Revisa el tipo de expulsión en el acta antes de usar este acumulado.</em>}
         {sanctionWarning && <em>Revisar acumulación de amarillas</em>}
       </section>}
 
