@@ -292,7 +292,7 @@ export class LocalDataService implements DataService {
       if (!Number.isInteger(goals) || goals < 0 || goals > 20) throw new DataServiceError(`Revisa los goles de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(yellowCards) || yellowCards < 0 || yellowCards > 2) throw new DataServiceError(`Revisa las amarillas de ${entry.playerName}.`, 'VALIDATION');
       if (!Number.isInteger(redCards) || redCards < 0 || redCards > 1) throw new DataServiceError(`Revisa las rojas de ${entry.playerName}.`, 'VALIDATION');
-      if (!Number.isInteger(expulsionYellowCards) || expulsionYellowCards < 0 || expulsionYellowCards > yellowCards || expulsionYellowCards > redCards) throw new DataServiceError(`Revisa las amarillas vinculadas a la expulsión de ${entry.playerName}.`, 'VALIDATION');
+      if (![0, 2].includes(expulsionYellowCards) || (expulsionYellowCards === 2 && (yellowCards !== 2 || redCards !== 1))) throw new DataServiceError(`Revisa el tipo de expulsión de ${entry.playerName}; una doble amarilla excluye las dos amarillas del acumulado.`, 'VALIDATION');
       if (suspensionServed && (calledUp || starter || entry.minutes || goals || yellowCards || redCards)) throw new DataServiceError(`${entry.playerName} no puede cumplir sanción y participar en el mismo partido.`, 'VALIDATION');
       if (!calledUp && (starter || entry.minutes > 0 || goals > 0 || yellowCards > 0 || redCards > 0)) throw new DataServiceError(`${entry.playerName} debe figurar como convocado.`, 'VALIDATION');
       return { playerId: player.id, playerName: player.name, number: entry.number === undefined ? player.number ?? null : entry.number, calledUp, starter, minutes: entry.minutes, goals, yellowCards, redCards, expulsionYellowCards, suspensionServed };
