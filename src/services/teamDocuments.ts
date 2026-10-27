@@ -38,6 +38,7 @@ export async function downloadAttendanceDocument(players: Player[], records: Att
   const doc = await createAttendanceDocument(players, records, label); doc.save('zabal-asistencia.pdf');
 }
 export async function createMatchDocument(match: MatchRecord, players: Player[]) {
+  if (match.minutes.some((entry) => entry.expulsionYellowCards === 1)) throw new Error('Revisa el tipo de expulsión en el acta antes de generar el PDF.');
   const result = match.goalsFor === undefined || match.goalsAgainst === undefined ? 'Sin registrar' : match.goalsFor + ' - ' + match.goalsAgainst;
   const { doc, autoTable } = await documentBase('Informe de partido · ' + match.date, 'Rival: ' + match.opponent);
   const captain = players.find((player) => player.id === match.captainId)?.name || match.minutes.find((entry) => entry.playerId === match.captainId)?.playerName || 'Sin registrar';
