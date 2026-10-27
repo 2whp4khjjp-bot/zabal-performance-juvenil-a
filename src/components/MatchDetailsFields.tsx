@@ -15,5 +15,5 @@ export function MatchDetailsFields({ value, onChange, players }: { value: MatchD
 }
 export function MatchPdfButton({ match, players }: { match: MatchRecord; players: Player[] }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <span className="match-pdf-action"><button type="button" className="button button--secondary" disabled={busy} aria-label={'Descargar informe del partido contra ' + match.opponent} onClick={() => { setBusy(true); setError(''); void downloadMatchDocument(match, players).catch(() => setError('No se pudo crear el PDF. Inténtalo otra vez.')).finally(() => setBusy(false)); }}><FileDown size={16} /> {busy ? 'Creando…' : 'PDF'}</button>{error && <small role="alert">{error}</small>}</span>;
+  return <span className="match-pdf-action"><button type="button" className="button button--secondary" disabled={busy} aria-label={'Descargar informe del partido contra ' + match.opponent} onClick={() => { setBusy(true); setError(''); void downloadMatchDocument(match, players).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'No se pudo crear el PDF. Inténtalo otra vez.')).finally(() => setBusy(false)); }}><FileDown size={16} /> {busy ? 'Creando…' : 'PDF'}</button>{error && <small role="alert">{error}</small>}</span>;
 }
