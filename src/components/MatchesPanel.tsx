@@ -47,7 +47,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const [starterByPlayer, setStarterByPlayer] = useState<Record<string, boolean>>({});
   const [yellowByPlayer, setYellowByPlayer] = useState<Record<string, string>>({});
   const [redByPlayer, setRedByPlayer] = useState<Record<string, string>>({});
-  const [expulsionYellowByPlayer, setExpulsionYellowByPlayer] = useState<Record<string, boolean>>({});
+  const [expulsionYellowByPlayer, setExpulsionYellowByPlayer] = useState<Record<string, number>>({});
   const [suspensionByPlayer, setSuspensionByPlayer] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [generatingMinutesPdf, setGeneratingMinutesPdf] = useState(false);
@@ -69,9 +69,9 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
 
   const totals = useMemo(() => {
     const byPlayer = new Map<string, TotalRow>();
-    players.filter((player) => !player.staffMember).forEach((player) => byPlayer.set(player.id, { player, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, accumulationYellowCards: 0, redCards: 0, suspensionServed: 0 }));
+    players.filter((player) => !player.staffMember).forEach((player) => byPlayer.set(player.id, { player, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, accumulationYellowCards: 0, needsReview: false, redCards: 0, suspensionServed: 0 }));
     scopedMatches.forEach((match) => match.minutes.forEach((entry) => {
-      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, number: entry.number ?? undefined, active: false, order: 999, joinedAt: match.date }, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, accumulationYellowCards: 0, redCards: 0, suspensionServed: 0 });
+      if (!byPlayer.has(entry.playerId)) byPlayer.set(entry.playerId, { player: { id: entry.playerId, name: entry.playerName, number: entry.number ?? undefined, active: false, order: 999, joinedAt: match.date }, callUps: 0, starts: 0, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, accumulationYellowCards: 0, needsReview: false, redCards: 0, suspensionServed: 0 });
       const total = byPlayer.get(entry.playerId)!;
       total.minutes += entry.minutes;
       total.goals += entry.goals ?? 0;
@@ -79,6 +79,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       if (entry.starter) total.starts += 1;
       total.yellowCards += entry.yellowCards ?? 0;
       total.accumulationYellowCards += (entry.yellowCards ?? 0) - (entry.expulsionYellowCards ?? 0);
+      if (entry.expulsionYellowCards === 1) total.needsReview = true;
       total.redCards += entry.redCards ?? 0;
       if (entry.suspensionServed) total.suspensionServed += 1;
       if (entry.minutes > 0) total.appearances += 1;
@@ -94,11 +95,12 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     callUps: [...totals].sort((a, b) => b.callUps - a.callUps || b.minutes - a.minutes).slice(0, 18),
     starters: [...totals].filter((item) => item.starts > 0).sort((a, b) => b.starts - a.starts || b.minutes - a.minutes).slice(0, 11),
     minutes: [...totals].filter((item) => item.minutes > 0).sort((a, b) => b.minutes - a.minutes).slice(0, 5),
-    discipline: totals.filter((item) => item.redCards > 0 || (item.accumulationYellowCards > 0 && (item.accumulationYellowCards % 5 === 4 || item.accumulationYellowCards % 5 === 0))).sort((a, b) => b.accumulationYellowCards - a.accumulationYellowCards || b.redCards - a.redCards),
+    discipline: totals.filter((item) => item.redCards > 0 || item.needsReview || (!item.needsReview && item.accumulationYellowCards > 0 && (item.accumulationYellowCards % 5 === 4 || item.accumulationYellowCards % 5 === 0))).sort((a, b) => b.accumulationYellowCards - a.accumulationYellowCards || b.redCards - a.redCards),
   }), [totals]);
 
   const makeEmailPdf = async () => {
-    if (emailTarget === 'totals') return createTotalsDocument(['Jugador', 'Conv.', 'Tit.', 'PJ', 'Minutos', 'Goles', 'TA', 'TA acum.', 'TR', 'Sanc.'], sortedTotals.map((item) => [item.player.name, item.callUps, item.starts, item.appearances, item.minutes, item.goals, item.yellowCards, item.accumulationYellowCards, item.redCards, item.suspensionServed]), matchScopeLabel(scope));
+    if ((emailTarget === 'totals' ? scopedMatches : emailTarget ? [emailTarget] : []).some((match) => match.minutes.some((entry) => entry.expulsionYellowCards === 1))) throw new Error('Revisa el tipo de expulsión en el acta antes de generar o enviar el PDF.');
+    if (emailTarget === 'totals') return createTotalsDocument(['Jugador', 'Conv.', 'Tit.', 'PJ', 'Minutos', 'Goles', 'TA', 'TA acum.', 'TR', 'Sanc.'], sortedTotals.map((item) => [item.player.name, item.callUps, item.starts, item.appearances, item.minutes, item.goals, item.yellowCards, item.needsReview ? 'Revisar' : item.accumulationYellowCards, item.redCards, item.suspensionServed]), matchScopeLabel(scope));
     if (!emailTarget) throw new Error('Selecciona un informe.');
     const currentMatch = matches.find((match) => match.id === emailTarget.id);
     if (!currentMatch) throw new Error('El partido ya no está disponible.');
@@ -121,12 +123,13 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
       }
       const yellow = Number(yellowByPlayer[player.id] || 0);
       const red = Number(redByPlayer[player.id] || 0);
-      const expulsionYellow = expulsionYellowByPlayer[player.id] ? 1 : 0;
+      const expulsionYellow = expulsionYellowByPlayer[player.id] ?? 0;
       const goals = Number(goalsByPlayer[player.id] || 0);
       if (!Number.isInteger(goals) || goals < 0 || goals > 20) next.push(`Revisa los goles de ${player.name}.`);
       if (!Number.isInteger(yellow) || yellow < 0 || yellow > 2) next.push(`Revisa las amarillas de ${player.name}.`);
       if (!Number.isInteger(red) || red < 0 || red > 1) next.push(`Revisa las rojas de ${player.name}.`);
-      if (expulsionYellow && (!yellow || !red)) next.push(`Marca una amarilla y una roja para vincular la expulsión de ${player.name}.`);
+      if (expulsionYellow === 1) next.push(`Revisa la expulsión de ${player.name}: el criterio anterior excluía una sola amarilla. Indica si fue por doble amarilla.`);
+      if (expulsionYellow === 2 && (yellow !== 2 || red !== 1)) next.push(`Para marcar doble amarilla de ${player.name}, registra dos amarillas y una roja.`);
       if (suspensionByPlayer[player.id] && (calledUpByPlayer[player.id] || starterByPlayer[player.id] || Number(minutesByPlayer[player.id] || 0) || goals || yellow || red)) next.push(`${player.name} no puede cumplir sanción y participar en el mismo partido.`);
     });
     setErrors(next);
@@ -149,7 +152,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         const goals = Number(goalsByPlayer[player.id] || 0);
         const yellowCards = Number(yellowByPlayer[player.id] || 0);
         const redCards = Number(redByPlayer[player.id] || 0);
-        const expulsionYellowCards = expulsionYellowByPlayer[player.id] ? 1 : 0;
+        const expulsionYellowCards = expulsionYellowByPlayer[player.id] ?? 0;
         const previousNumber = editingMatch?.minutes.find((entry) => entry.playerId === player.id)?.number;
         return { playerId: player.id, playerName: player.name, number: previousNumber === undefined ? player.number ?? null : previousNumber, calledUp: Boolean(calledUpByPlayer[player.id]), starter: Boolean(starterByPlayer[player.id]), minutes: Number(raw || 0), goals, yellowCards, redCards, expulsionYellowCards, suspensionServed: Boolean(suspensionByPlayer[player.id]) };
       }),
@@ -181,7 +184,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     setGoalsByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.goals ?? 0) > 0).map((entry) => [entry.playerId, String(entry.goals)])));
     setYellowByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.yellowCards ?? 0) > 0).map((entry) => [entry.playerId, String(entry.yellowCards)])));
     setRedByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.redCards ?? 0) > 0).map((entry) => [entry.playerId, String(entry.redCards)])));
-    setExpulsionYellowByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.expulsionYellowCards ?? 0) > 0).map((entry) => [entry.playerId, true])));
+    setExpulsionYellowByPlayer(Object.fromEntries(match.minutes.filter((entry) => (entry.expulsionYellowCards ?? 0) > 0).map((entry) => [entry.playerId, entry.expulsionYellowCards ?? 0])));
     setSuspensionByPlayer(Object.fromEntries(match.minutes.filter((entry) => entry.suspensionServed).map((entry) => [entry.playerId, true])));
     setErrors([]); setMode('new'); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -232,7 +235,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
               <span data-feature="cards" className="match-card-input match-yellow-input"><span className="card-mark card-mark--yellow" /><input type="number" min="0" max="2" step="1" inputMode="numeric" value={yellowByPlayer[player.id] ?? ''} onChange={(event) => { const value = event.target.value; setYellowByPlayer((current) => ({ ...current, [player.id]: value })); if (value !== '') setCalledUpByPlayer((current) => ({ ...current, [player.id]: true })); setErrors([]); }} aria-label={`Tarjetas amarillas de ${player.name}`} placeholder="0" /></span>
               <span data-feature="cards" className="match-card-input match-red-input"><span className="card-mark card-mark--red" /><input type="number" min="0" max="1" step="1" inputMode="numeric" value={redByPlayer[player.id] ?? ''} onChange={(event) => { const value = event.target.value; setRedByPlayer((current) => ({ ...current, [player.id]: value })); if (value !== '') setCalledUpByPlayer((current) => ({ ...current, [player.id]: true })); setErrors([]); }} aria-label={`Tarjetas rojas de ${player.name}`} placeholder="0" /></span>
               <div className="match-discipline-details">
-                {((Number(yellowByPlayer[player.id] || 0) > 0 && Number(redByPlayer[player.id] || 0) > 0) || expulsionYellowByPlayer[player.id]) && <label><input type="checkbox" checked={Boolean(expulsionYellowByPlayer[player.id])} onChange={(event) => { setExpulsionYellowByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); setErrors([]); }} /> Una amarilla vinculada a la expulsión (se registra, no suma al acumulado)</label>}
+                {((Number(yellowByPlayer[player.id] || 0) > 0 && Number(redByPlayer[player.id] || 0) > 0) || expulsionYellowByPlayer[player.id]) && <label>Tipo de expulsión<select value={expulsionYellowByPlayer[player.id] ?? 0} onChange={(event) => { setExpulsionYellowByPlayer((current) => ({ ...current, [player.id]: Number(event.target.value) })); setErrors([]); }}><option value={0}>Roja directa o tipo pendiente de confirmar</option>{expulsionYellowByPlayer[player.id] === 1 && <option value={1}>Criterio anterior: revisar antes de guardar</option>}<option value={2}>Doble amarilla: ambas constan en acta, ninguna suma al acumulado</option></select></label>}
                 <label><input type="checkbox" checked={Boolean(suspensionByPlayer[player.id])} onChange={(event) => { setSuspensionByPlayer((current) => ({ ...current, [player.id]: event.target.checked })); if (event.target.checked) { setCalledUpByPlayer((current) => ({ ...current, [player.id]: false })); setStarterByPlayer((current) => ({ ...current, [player.id]: false })); } setErrors([]); }} /> Cumple sanción en este partido</label>
               </div>
             </div>)}
@@ -247,7 +250,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
           <article className="panel-card match-totals-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">{matchScopeLabel(scope)}</p><h2>Totales por jugador</h2></div><div className="match-totals-heading-actions"><button type="button" className="button button--secondary" disabled={generatingMinutesPdf || !scopedMatches.length} onClick={() => { setGeneratingMinutesPdf(true); void generateMinutesPdf(players, scopedMatches, matchScopeLabel(scope)).finally(() => setGeneratingMinutesPdf(false)); }}><FileDown size={17} /> {generatingMinutesPdf ? 'Creando…' : 'Informe PDF'}</button><span className="count-badge count-badge--blue">{scopedMatches.length}</span></div></div>
             <button type="button" className="button button--secondary report-email-open" disabled={!matches.length} onClick={() => setEmailTarget('totals')}>Enviar acumulado en PDF</button>
-            {totals.length ? <div className="table-scroll"><table><thead><tr>{totalHeader('Dorsal', 'number')}{totalHeader('Jugador', 'name')}{totalHeader('Conv.', 'callUps')}{totalHeader('Tit.', 'starts')}{totalHeader('PJ', 'appearances')}{totalHeader('Minutos', 'minutes')}{totalHeader('Goles', 'goals')}{totalHeader('TA', 'yellowCards')}{totalHeader('TA acum.', 'accumulationYellowCards')}{totalHeader('TR', 'redCards')}{totalHeader('Sanc.', 'suspensionServed')}</tr></thead><tbody>{sortedTotals.map((item) => { const warning = item.accumulationYellowCards > 0 && (item.accumulationYellowCards % 5 === 4 || item.accumulationYellowCards % 5 === 0); return <tr key={item.player.id} className={warning ? 'discipline-warning-row' : ''}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong>{warning && <small className="discipline-warning"><AlertTriangle size={13} /> Revisar acumulación</small>}</td><td>{item.callUps}</td><td>{item.starts}</td><td>{item.appearances}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td><td data-feature="cards"><strong>{item.yellowCards}</strong></td><td data-feature="cards"><strong>{item.accumulationYellowCards}</strong></td><td data-feature="cards"><strong>{item.redCards}</strong></td><td>{item.suspensionServed}</td></tr>; })}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin actas registradas</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
+            {totals.length ? <div className="table-scroll"><table><thead><tr>{totalHeader('Dorsal', 'number')}{totalHeader('Jugador', 'name')}{totalHeader('Conv.', 'callUps')}{totalHeader('Tit.', 'starts')}{totalHeader('PJ', 'appearances')}{totalHeader('Minutos', 'minutes')}{totalHeader('Goles', 'goals')}{totalHeader('TA', 'yellowCards')}{totalHeader('TA acum.', 'accumulationYellowCards')}{totalHeader('TR', 'redCards')}{totalHeader('Sanc.', 'suspensionServed')}</tr></thead><tbody>{sortedTotals.map((item) => { const warning = !item.needsReview && item.accumulationYellowCards > 0 && (item.accumulationYellowCards % 5 === 4 || item.accumulationYellowCards % 5 === 0); return <tr key={item.player.id} className={warning ? 'discipline-warning-row' : ''}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong>{warning && <small className="discipline-warning"><AlertTriangle size={13} /> Revisar acumulación</small>}</td><td>{item.callUps}</td><td>{item.starts}</td><td>{item.appearances}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td><td data-feature="cards"><strong>{item.yellowCards}</strong></td><td data-feature="cards"><strong>{item.needsReview ? 'Revisar' : item.accumulationYellowCards}</strong></td><td data-feature="cards"><strong>{item.redCards}</strong></td><td>{item.suspensionServed}</td></tr>; })}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin actas registradas</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
           <article className="panel-card recent-matches-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
@@ -262,7 +265,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><UsersRound /></span><div><p className="eyebrow eyebrow--dark">Top 18</p><h2>Más convocados</h2></div></div><RankingList items={rankings.callUps} value={(item) => item.callUps} suffix="conv." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Star /></span><div><p className="eyebrow eyebrow--dark">Top 11</p><h2>Más titularidades</h2></div></div><RankingList items={rankings.starters} value={(item) => item.starts} suffix="tit." /></article>
         <article className="panel-card ranking-card"><div className="ranking-heading"><span><Clock3 /></span><div><p className="eyebrow eyebrow--dark">Top 5</p><h2>Más minutos</h2></div></div><RankingList items={rankings.minutes} value={(item) => item.minutes} suffix="min" /></article>
-        <article className="panel-card ranking-card discipline-ranking"><div className="ranking-heading"><span><ShieldAlert /></span><div><p className="eyebrow eyebrow--dark">Disciplina · {matchScopeLabel(scope)}</p><h2>Alarmas por tarjetas</h2></div></div>{rankings.discipline.length ? <div className="discipline-ranking-list">{rankings.discipline.map((item) => <div key={item.player.id}><strong>{item.player.name}</strong><span><i className="card-mark card-mark--yellow" /> {item.yellowCards} TA ({item.accumulationYellowCards} acum.)</span>{item.redCards > 0 && <span><i className="card-mark card-mark--red" /> {item.redCards} TR</span>}{item.suspensionServed > 0 && <small>{item.suspensionServed} partido(s) de sanción marcados como cumplidos</small>}<small>Revisión manual del delegado</small></div>)}</div> : <div className="ranking-empty"><ShieldAlert size={28} /><p>Sin alarmas por acumulación</p></div>}</article>
+        <article className="panel-card ranking-card discipline-ranking"><div className="ranking-heading"><span><ShieldAlert /></span><div><p className="eyebrow eyebrow--dark">Disciplina · {matchScopeLabel(scope)}</p><h2>Alarmas por tarjetas</h2></div></div>{rankings.discipline.length ? <div className="discipline-ranking-list">{rankings.discipline.map((item) => <div key={item.player.id}><strong>{item.player.name}</strong><span><i className="card-mark card-mark--yellow" /> {item.yellowCards} TA ({item.needsReview ? 'revisar' : item.accumulationYellowCards} acum.)</span>{item.redCards > 0 && <span><i className="card-mark card-mark--red" /> {item.redCards} TR</span>}{item.suspensionServed > 0 && <small>{item.suspensionServed} partido(s) de sanción marcados como cumplidos</small>}<small>Revisión manual del delegado</small></div>)}</div> : <div className="ranking-empty"><ShieldAlert size={28} /><p>Sin alarmas por acumulación</p></div>}</article>
         </div>
       </section>}
     </main>
@@ -273,7 +276,7 @@ function MatchScopeControl({ scope, onChange, count }: { scope: MatchScope; onCh
   return <div className="match-scope-control"><span><strong>Datos mostrados:</strong> las tarjetas y los acumulados se calculan solo para esta fase.</span><label>Periodo<select value={scope} onChange={(event) => onChange(event.target.value as MatchScope)}><option value="league">Liga</option><option value="preseason">Pretemporada</option><option value="all">Todo el historial</option></select></label><span className="count-badge count-badge--blue">{count}</span></div>;
 }
 
-type TotalRow = { player: Player; callUps: number; starts: number; appearances: number; minutes: number; goals: number; yellowCards: number; accumulationYellowCards: number; redCards: number; suspensionServed: number };
+type TotalRow = { player: Player; callUps: number; starts: number; appearances: number; minutes: number; goals: number; yellowCards: number; accumulationYellowCards: number; needsReview: boolean; redCards: number; suspensionServed: number };
 function RankingList({ items, value, suffix, podium = false }: { items: TotalRow[]; value: (item: TotalRow) => number; suffix: string; podium?: boolean }) {
   if (!items.length) return <div className="ranking-empty"><Medal size={28} /><p>Sin datos suficientes todavía</p></div>;
   return <ol className="ranking-list">{items.map((item, index) => <li key={item.player.id} className={podium && index < 3 ? `podium-${index + 1}` : ''}><span className="ranking-position">{index + 1}</span><span className="ranking-player"><strong>{item.player.name}</strong><small>Dorsal {item.player.number ?? '—'}</small></span><strong className="ranking-value">{value(item)} <small>{suffix}</small></strong></li>)}</ol>;
