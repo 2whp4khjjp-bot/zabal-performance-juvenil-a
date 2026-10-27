@@ -19,8 +19,9 @@ describe('configuración y documentos del equipo', () => {
     const { context } = service();
     context.rows_ = () => [{ id: 'p1', nombre: 'Cristian Blanco', dorsal: 18 }];
     const base = { date: '2026-10-17', type: 'official', stage: 'league', opponent: 'Marbella', durationMinutes: 90 };
-    const card = { playerId: 'p1', playerName: 'Cristian Blanco', calledUp: true, starter: false, minutes: 0, goals: 0, yellowCards: 2, redCards: 1, expulsionYellowCards: 1 };
-    expect(context.validateMatchInput_({ ...base, minutes: [card] }, { role: 'staff' }).entries[0]).toMatchObject({ yellowCards: 2, redCards: 1, expulsionYellowCards: 1 });
+    const card = { playerId: 'p1', playerName: 'Cristian Blanco', calledUp: true, starter: false, minutes: 0, goals: 0, yellowCards: 2, redCards: 1, expulsionYellowCards: 2 };
+    expect(context.validateMatchInput_({ ...base, minutes: [card] }, { role: 'staff' }).entries[0]).toMatchObject({ yellowCards: 2, redCards: 1, expulsionYellowCards: 2 });
+    expect(() => context.validateMatchInput_({ ...base, minutes: [{ ...card, expulsionYellowCards: 1 }] }, { role: 'staff' })).toThrow(/tipo de expulsión/);
     expect(() => context.validateMatchInput_({ ...base, minutes: [{ ...card, redCards: 0 }] }, { role: 'staff' })).toThrow();
     expect(() => context.validateMatchInput_({ ...base, minutes: [{ ...card, suspensionServed: true }] }, { role: 'staff' })).toThrow();
     const served = { ...card, calledUp: false, yellowCards: 0, redCards: 0, expulsionYellowCards: 0, suspensionServed: true };
