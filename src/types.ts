@@ -152,7 +152,7 @@ export type MatchMinutes = {
   goals?: number;
   yellowCards?: number;
   redCards?: number;
-  /** Amarillas registradas que el cuerpo técnico vincula a una expulsión. */
+  /** 2 solo si la expulsión fue por doble amarilla; ambas quedan registradas pero fuera del acumulado. Un valor legado de 1 requiere revisión. */
   expulsionYellowCards?: number;
   /** Confirmación manual de que cumplió sanción en este partido. */
   suspensionServed?: boolean;
