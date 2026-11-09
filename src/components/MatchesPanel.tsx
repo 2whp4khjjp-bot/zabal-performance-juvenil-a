@@ -1,3 +1,4 @@
+import { createDisciplinaryDocument } from '../services/disciplinaryReport';
 import { ReportEmailDialog } from './ReportEmailDialog';
 import { createMatchDocument, createTotalsDocument } from '../services/teamDocuments';
 import { sortTotals, type TotalsSort } from '../utils/totalsSort';
@@ -27,7 +28,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   const allPlayers = useMemo(() => players.filter((player) => !player.staffMember), [players]);
   const eligiblePlayers = useMemo(() => allPlayers.filter((player) => !player.injured), [allPlayers]);
   const [totalsSort, setTotalsSort] = useState<TotalsSort>({ key: 'number', descending: false });
-  const [emailTarget, setEmailTarget] = useState<MatchRecord | 'totals' | null>(null);
+  const [emailTarget, setEmailTarget] = useState<MatchRecord | 'totals' | 'discipline' | null>(null);
   const [mode, setMode] = useState<'new' | 'history' | 'stats'>('new');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [date, setDate] = useState(todayKey());
@@ -99,6 +100,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
   }), [totals]);
 
   const makeEmailPdf = async () => {
+    if (emailTarget === 'discipline') return createDisciplinaryDocument(players, matches.filter(m => m.stage === 'league'), 'Liga');
     if ((emailTarget === 'totals' ? scopedMatches : emailTarget ? [emailTarget] : []).some((match) => match.minutes.some((entry) => entry.expulsionYellowCards === 1))) throw new Error('Revisa el tipo de expulsión en el acta antes de generar o enviar el PDF.');
     if (emailTarget === 'totals') return createTotalsDocument(['Jugador', 'Conv.', 'Tit.', 'PJ', 'Minutos', 'Goles', 'TA', 'TA acum.', 'TR', 'Sanc.'], sortedTotals.map((item) => [item.player.name, item.callUps, item.starts, item.appearances, item.minutes, item.goals, item.yellowCards, item.needsReview ? 'Revisar' : item.accumulationYellowCards, item.redCards, item.suspensionServed]), matchScopeLabel(scope));
     if (!emailTarget) throw new Error('Selecciona un informe.');
@@ -106,7 +108,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
     if (!currentMatch) throw new Error('El partido ya no está disponible.');
     return createMatchDocument(currentMatch, players);
   };
-  const emailLabel = emailTarget === 'totals' ? `Acumulado de partidos · ${matchScopeLabel(scope)}` : emailTarget ? `Partido contra ${emailTarget.opponent} · ${emailTarget.date}` : '';
+  const emailLabel = emailTarget === 'discipline' ? 'Informe disciplinario · Liga' : emailTarget === 'totals' ? `Acumulado de partidos · ${matchScopeLabel(scope)}` : emailTarget ? `Partido contra ${emailTarget.opponent} · ${emailTarget.date}` : '';
 
   const validate = () => {
     const next: string[] = [];
@@ -249,6 +251,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
         <div className="matches-history-grid">
           <article className="panel-card match-totals-card">
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">{matchScopeLabel(scope)}</p><h2>Totales por jugador</h2></div><div className="match-totals-heading-actions"><button type="button" className="button button--secondary" disabled={generatingMinutesPdf || !scopedMatches.length} onClick={() => { setGeneratingMinutesPdf(true); void generateMinutesPdf(players, scopedMatches, matchScopeLabel(scope)).finally(() => setGeneratingMinutesPdf(false)); }}><FileDown size={17} /> {generatingMinutesPdf ? 'Creando…' : 'Informe PDF'}</button><span className="count-badge count-badge--blue">{scopedMatches.length}</span></div></div>
+            <button type="button" className="button button--secondary report-email-open" onClick={() => setEmailTarget('discipline')}>Informe disciplinario · Descargar y enviar</button>
             <button type="button" className="button button--secondary report-email-open" disabled={!matches.length} onClick={() => setEmailTarget('totals')}>Enviar acumulado en PDF</button>
             {totals.length ? <div className="table-scroll"><table><thead><tr>{totalHeader('Dorsal', 'number')}{totalHeader('Jugador', 'name')}{totalHeader('Conv.', 'callUps')}{totalHeader('Tit.', 'starts')}{totalHeader('PJ', 'appearances')}{totalHeader('Minutos', 'minutes')}{totalHeader('Goles', 'goals')}{totalHeader('TA', 'yellowCards')}{totalHeader('TA acum.', 'accumulationYellowCards')}{totalHeader('TR', 'redCards')}{totalHeader('Sanc.', 'suspensionServed')}</tr></thead><tbody>{sortedTotals.map((item) => { const warning = !item.needsReview && item.accumulationYellowCards > 0 && (item.accumulationYellowCards % 5 === 4 || item.accumulationYellowCards % 5 === 0); return <tr key={item.player.id} className={warning ? 'discipline-warning-row' : ''}><td>{item.player.number ?? '—'}</td><td><strong>{item.player.name}</strong>{warning && <small className="discipline-warning"><AlertTriangle size={13} /> Revisar acumulación</small>}</td><td>{item.callUps}</td><td>{item.starts}</td><td>{item.appearances}</td><td><strong>{item.minutes}</strong></td><td><strong>{item.goals}</strong></td><td data-feature="cards"><strong>{item.yellowCards}</strong></td><td data-feature="cards"><strong>{item.needsReview ? 'Revisar' : item.accumulationYellowCards}</strong></td><td data-feature="cards"><strong>{item.redCards}</strong></td><td>{item.suspensionServed}</td></tr>; })}</tbody></table></div> : <div className="empty-state compact"><UsersRound size={30} /><h2>Sin actas registradas</h2><p>Los totales aparecerán después de guardar el primer partido.</p></div>}
           </article>
@@ -256,7 +259,7 @@ export function MatchesPanel({ players, matches, saving, onSave, onUpdate, onDel
             <div className="panel-card__heading"><div><p className="eyebrow eyebrow--dark">Registro</p><h2>Últimos partidos</h2></div><History /></div>
             {matches.length ? <div className="recent-match-list">{matches.map((match) => <article className="recent-match-row" key={match.id}><span className={`match-type-icon match-type-icon--${match.type}`}><Trophy size={18} /></span><div><strong>{match.opponent}</strong><small>{match.date} · {matchStageLabel(getMatchStage(match))} · {typeLabel(match.type)} · {match.durationMinutes} min</small></div><span><strong>{match.minutes.filter((item) => item.calledUp).length}</strong><small>convocados</small></span><span className="recent-match-actions"><MatchPdfButton match={match} players={players} /><button type="button" className="button button--secondary" onClick={() => setEmailTarget(match)}>Enviar PDF</button><button type="button" onClick={() => editMatch(match)} disabled={saving} aria-label={`Editar partido contra ${match.opponent}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => { if (window.confirm(`¿Eliminar el partido contra ${match.opponent}? Esta acción no se puede deshacer.`)) void onDelete(match.id); }} disabled={saving} aria-label={`Eliminar partido contra ${match.opponent}`}><Trash2 size={16} /></button></span></article>)}</div> : <div className="empty-state compact"><Trophy size={30} /><h2>Todavía no hay partidos</h2><button className="text-button" onClick={() => setMode('new')}>Registrar el primero</button></div>}
           </article>
-          {emailTarget && <ReportEmailDialog key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals'} onClose={() => setEmailTarget(null)} />}
+          {emailTarget && <ReportEmailDialog key={emailLabel} label={emailLabel} createPdf={makeEmailPdf} canSchedule={emailTarget === 'totals' || emailTarget === 'discipline'} reportKind={emailTarget === 'discipline' ? 'discipline' : undefined} onClose={() => setEmailTarget(null)} />}
         </div>
       </section> : <section aria-label="Estadísticas de partidos">
         <MatchScopeControl scope={scope} onChange={setScope} count={scopedMatches.length} />
