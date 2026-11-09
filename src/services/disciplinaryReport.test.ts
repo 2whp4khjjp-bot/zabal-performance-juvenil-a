@@ -1,4 +1,3 @@
-import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MatchRecord, Player } from '../types';
 import { collectDiscipline, createDisciplinaryDocument } from './disciplinaryReport';
@@ -19,7 +18,6 @@ describe('Informe disciplinario móvil',()=>{
    const game={...match(1),minutes:players.map(p=>({playerId:p.id,yellowCards:1}))} as MatchRecord;
    const doc=await createDisciplinaryDocument(players,[game]);
    expect(doc.getNumberOfPages()).toBe(3);
-   if(process.env.PDF_QA) writeFileSync('/private/tmp/zabal-discipline-qa.pdf',Buffer.from(doc.output('arraybuffer')));
    expect(doc.output()).toContain('Raul Cote');
  });
 });
